@@ -41,8 +41,8 @@ BAR_SHADOW = (0, 45, 78, 255)
 GREEN = (0, 181, 45, 255)
 GREEN_DARK = (0, 83, 31, 255)
 BLACK = (0, 0, 0, 255)
-GRID = (0, 0, 0, 185)
-GRID_SOFT = (0, 0, 0, 80)
+GRID = (0, 0, 0, 118)
+GRID_SOFT = (0, 0, 0, 50)
 WHITE = (255, 255, 255, 255)
 TEXT = (0, 0, 0, 255)
 ROW_LIGHT = (242, 250, 253, 118)
@@ -63,29 +63,55 @@ ROOT = Path(__file__).resolve().parent
 
 
 def _font_candidates(names):
-    folders = [ROOT, ROOT / "fonts", ROOT / "assets", ROOT / "font"]
+    """Find fonts reliably in GitHub Actions.
+
+    The previous renderer could silently fall back to DejaVu if the current
+    working directory was different or if the file lived in /fonts. This scans
+    the repo root, common font folders, then the whole project tree using a
+    case-insensitive match. The exact font path prints in the Actions log.
+    """
+    wanted = {n.lower(): n for n in names}
+    folders = [ROOT, ROOT / "fonts", ROOT / "Fonts", ROOT / "assets", ROOT / "Assets", ROOT / "font"]
+
     for folder in folders:
-        for name in names:
-            p = folder / name
-            if p.exists():
-                return str(p)
+        if not folder.exists():
+            continue
+        for child in folder.iterdir():
+            if child.is_file() and child.name.lower() in wanted:
+                return str(child)
+
+    for child in ROOT.rglob("*.ttf"):
+        if child.name.lower() in wanted:
+            return str(child)
+    for child in ROOT.rglob("*.otf"):
+        if child.name.lower() in wanted:
+            return str(child)
     return None
 
 
+_LOADED_FONT_PATHS = {}
+
+
 def font(size, role="body"):
-    # Sheet text uses regular Lexend, not bold.
+    # Sheet text uses normal Lexend Regular — the same family/look Google Sheets uses.
+    # Put the font at: ./fonts/Lexend-Regular.ttf
     if role == "brand":
         names = ["superchargestraight.ttf", "SuperchargeStraight.ttf", "supercharge_straight.ttf"]
     elif role == "header":
-        names = ["Lexend-Regular.ttf", "Lexend.ttf", "Lexend-Medium.ttf"]
+        names = ["Lexend-Regular.ttf", "Lexend.ttf", "Lexend-Regular.otf"]
     else:
-        names = ["Lexend-Regular.ttf", "Lexend.ttf"]
+        names = ["Lexend-Regular.ttf", "Lexend.ttf", "Lexend-Regular.otf"]
 
     found = _font_candidates(names)
     if found:
+        key = f"{role}:{Path(found).name}"
+        if key not in _LOADED_FONT_PATHS:
+            print(f"FONT OK [{role}]: {found}")
+            _LOADED_FONT_PATHS[key] = found
         return ImageFont.truetype(found, size)
 
-    print(f"WARNING: Missing font for role={role}. Put {names[0]} beside main.py or in /fonts.")
+    # Do NOT fail silently anymore. The log tells you exactly why it looks wrong.
+    print(f"FONT MISSING [{role}]: expected one of {names} in repo root or /fonts. Falling back to system font.")
     fallbacks = [
         "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
         "/usr/share/fonts/truetype/liberation2/LiberationSans-Regular.ttf",
@@ -96,10 +122,11 @@ def font(size, role="body"):
             "/usr/share/fonts/truetype/dejavu/DejaVuSansCondensed-Bold.ttf",
             "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
         ]
-    for p in fallbacks:
-        if Path(p).exists():
-            return ImageFont.truetype(p, size)
+    for fp in fallbacks:
+        if Path(fp).exists():
+            return ImageFont.truetype(fp, size)
     return ImageFont.load_default()
+
 FONT_HEADER = font(10, "header")
 FONT_BODY = font(9, "body")
 FONT_NAME = font(9, "body")
@@ -109,7 +136,7 @@ FONT_BRAND_SMALL = font(10, "brand")
 def build_fonts(row_h, sep_h):
     # One-image mode: shrink text only when the sheet has more rows than the reference can hold.
     body_size = max(6, min(9, row_h - 4))
-    brand_size = max(7, min(10, sep_h - 8))
+    brand_size = max(6, min(8, sep_h - 10))
     return {
         "header": font(10, "header"),
         "body": font(body_size, "body"),
@@ -270,15 +297,16 @@ def draw_header(draw, xs):
         center_text(draw, (x1+5,Y0,x2-16,Y0+HEADER_H), label, FONT_HEADER, WHITE, yoff=-1)
         draw.polygon([(x2-13,Y0+8),(x2-5,Y0+8),(x2-9,Y0+15)], fill=(224,240,250,240))
         draw.line((x2,Y0,x2,Y0+HEADER_H), fill=(0,42,79,255), width=1)
-    draw.line((X0,Y0,X0+TABLE_W,Y0), fill=BLACK, width=2)
-    draw.line((X0,Y0+HEADER_H,X0+TABLE_W,Y0+HEADER_H), fill=BLACK, width=2)
+    draw.line((X0,Y0,X0+TABLE_W,Y0), fill=GREEN_DARK, width=1)
+    draw.line((X0,Y0+HEADER_H,X0+TABLE_W,Y0+HEADER_H), fill=GREEN_DARK, width=1)
 
 
 def draw_bar(draw, y):
     gradient(draw, (X0,y,X0+TABLE_W,y+SEP_H), BAR_TOP, BAR_BOT)
     draw.line((X0,y+1,X0+TABLE_W,y+1), fill=(126,186,226,135), width=1)
     draw.line((X0,y+SEP_H-2,X0+TABLE_W,y+SEP_H-2), fill=BAR_SHADOW, width=1)
-    draw.rectangle((X0,y,X0+TABLE_W,y+SEP_H), outline=BLACK, width=1)
+    draw.line((X0, y, X0+TABLE_W, y), fill=GREEN_DARK, width=1)
+    draw.line((X0, y+SEP_H-1, X0+TABLE_W, y+SEP_H-1), fill=GREEN_DARK, width=1)
     center_text(draw, (X0+7,y,X0+258,y+SEP_H), BRAND_LEFT, FONT_BRAND, WHITE, stroke=1, yoff=-1)
     center_text(draw, (X0+242,y,X0+TABLE_W-242,y+SEP_H), BRAND_MID, FONT_BRAND, WHITE, stroke=1, yoff=-1)
     center_text(draw, (X0+TABLE_W-258,y,X0+TABLE_W-7,y+SEP_H), BRAND_RIGHT, FONT_BRAND_SMALL, WHITE, stroke=1, yoff=-1)
@@ -344,15 +372,16 @@ def draw_header2(draw, xs, fonts):
         center_text(draw, (x1+5,Y0,x2-16,Y0+HEADER_H), label, fonts["header"], WHITE, yoff=-1)
         draw.polygon([(x2-13,Y0+8),(x2-5,Y0+8),(x2-9,Y0+15)], fill=(224,240,250,240))
         draw.line((x2,Y0,x2,Y0+HEADER_H), fill=(0,42,79,255), width=1)
-    draw.line((X0,Y0,X0+TABLE_W,Y0), fill=BLACK, width=2)
-    draw.line((X0,Y0+HEADER_H,X0+TABLE_W,Y0+HEADER_H), fill=BLACK, width=2)
+    draw.line((X0,Y0,X0+TABLE_W,Y0), fill=GREEN_DARK, width=1)
+    draw.line((X0,Y0+HEADER_H,X0+TABLE_W,Y0+HEADER_H), fill=GREEN_DARK, width=1)
 
 
 def draw_bar2(draw, y, sep_h, fonts):
     gradient(draw, (X0,y,X0+TABLE_W,y+sep_h), BAR_TOP, BAR_BOT)
     draw.line((X0,y+1,X0+TABLE_W,y+1), fill=(126,186,226,135), width=1)
     draw.line((X0,y+sep_h-2,X0+TABLE_W,y+sep_h-2), fill=BAR_SHADOW, width=1)
-    draw.rectangle((X0,y,X0+TABLE_W,y+sep_h), outline=BLACK, width=1)
+    draw.line((X0, y, X0+TABLE_W, y), fill=GREEN_DARK, width=1)
+    draw.line((X0, y+sep_h-1, X0+TABLE_W, y+sep_h-1), fill=GREEN_DARK, width=1)
     center_text(draw, (X0+7,y,X0+258,y+sep_h), BRAND_LEFT.lower(), fonts["brand"], WHITE, stroke=0, yoff=-1)
     center_text(draw, (X0+242,y,X0+TABLE_W-242,y+sep_h), BRAND_MID.lower(), fonts["brand"], WHITE, stroke=0, yoff=-1)
     center_text(draw, (X0+TABLE_W-258,y,X0+TABLE_W-7,y+sep_h), BRAND_RIGHT.lower(), fonts["brand_small"], WHITE, stroke=0, yoff=-1)
@@ -383,7 +412,6 @@ def render_single(items):
         xs.append(xs[-1]+w)
 
     draw.rectangle((FRAME_PAD, FRAME_PAD, CANVAS_W-FRAME_PAD, CANVAS_H-FRAME_PAD), outline=GREEN, width=5)
-    draw.rectangle((14, 14, CANVAS_W-14, CANVAS_H-14), outline=GREEN_DARK, width=1)
 
     draw_header2(draw, xs, fonts)
     y = Y0 + HEADER_H
@@ -397,7 +425,7 @@ def render_single(items):
             y += row_h
             row_idx += 1
 
-    draw.rectangle((X0,Y0,X0+TABLE_W,min(y,BOTTOM_Y)), outline=BLACK, width=2)
+    draw.rectangle((X0,Y0,X0+TABLE_W,min(y,BOTTOM_Y)), outline=GREEN, width=3)
     out = f"{OUTPUT_PREFIX}.png"
     img.convert("RGB").save(out, quality=98, optimize=True)
     print(f"SUCCESS: Rendered ONE image: rows={row_idx}, row_h={row_h}, sep_h={sep_h}, file={out}")
