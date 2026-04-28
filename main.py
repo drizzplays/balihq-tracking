@@ -17,16 +17,23 @@ OUTPUT_PREFIX = os.environ.get("OUTPUT_PREFIX", "output")
 ROOT = Path(__file__).resolve().parent
 FONTS_DIR = ROOT / "fonts"
 
-CANVAS_W = int(os.environ.get("CANVAS_W", "1038"))
-CANVAS_H = int(os.environ.get("CANVAS_H", "757"))
-FRAME_PAD = 10
-X0 = int(os.environ.get("TABLE_X", "15"))
-Y0 = int(os.environ.get("TABLE_Y", "17"))
-HEADER_H = int(os.environ.get("HEADER_H", "21"))
-BOTTOM_Y = CANVAS_H - 15
+# Render larger so Discord previews/attachments stay sharp.
+# Use RENDER_SCALE=1 if you need the original small output.
+RENDER_SCALE = int(os.environ.get("RENDER_SCALE", "2"))
+
+def sc(v: int) -> int:
+    return int(round(v * RENDER_SCALE))
+
+CANVAS_W = sc(int(os.environ.get("CANVAS_W", "1038")))
+CANVAS_H = sc(int(os.environ.get("CANVAS_H", "757")))
+FRAME_PAD = sc(10)
+X0 = sc(int(os.environ.get("TABLE_X", "15")))
+Y0 = sc(int(os.environ.get("TABLE_Y", "17")))
+HEADER_H = sc(int(os.environ.get("HEADER_H", "21")))
+BOTTOM_Y = CANVAS_H - sc(15)
 
 COL_NAMES = ["League", "PST", "MTN", "EST", "Player 1", "Player 2", "BET", "Unit", "History", "Split %", "Set Break Down"]
-COL_WIDTHS = [109, 61, 61, 61, 137, 138, 77, 76, 124, 77, 87]
+COL_WIDTHS = [sc(v) for v in [109, 61, 61, 61, 137, 138, 77, 76, 124, 77, 87]]
 TABLE_W = sum(COL_WIDTHS)
 
 BRAND_LEFT = os.environ.get("BRAND_LEFT", "x.com/balihq").lower()
@@ -325,30 +332,30 @@ def layout_for_single_image(items):
     usable_h = BOTTOM_Y - (Y0 + HEADER_H)
 
     # Target reference density. Shrinks only enough to keep ONE image.
-    target_row_h = 20
-    target_sep_h = 20
+    target_row_h = sc(20)
+    target_sep_h = sc(20)
     if row_count * target_row_h + bar_count * target_sep_h <= usable_h:
         return target_row_h, target_sep_h
 
-    sep_h = 17
-    row_h = max(10, int((usable_h - bar_count * sep_h) / max(1, row_count)))
-    if row_h < 13:
-        sep_h = 14
-        row_h = max(9, int((usable_h - bar_count * sep_h) / max(1, row_count)))
+    sep_h = sc(17)
+    row_h = max(sc(10), int((usable_h - bar_count * sep_h) / max(1, row_count)))
+    if row_h < sc(13):
+        sep_h = sc(14)
+        row_h = max(sc(9), int((usable_h - bar_count * sep_h) / max(1, row_count)))
     return row_h, sep_h
 
 
 def build_fonts(row_h, sep_h):
-    body_size = max(7, min(10, row_h - 6))
-    header_size = 10
+    body_size = max(sc(7), min(sc(10), row_h - sc(6)))
+    header_size = sc(10)
     # reduced filler row text per your request
-    brand_size = max(6, min(8, sep_h - 10))
+    brand_size = max(sc(6), min(sc(8), sep_h - sc(10)))
     return {
         "header": fnt(header_size, "header"),
         "body": fnt(body_size, "body"),
         "name": fnt(body_size, "body"),
         "brand": fnt(brand_size, "brand"),
-        "brand_small": fnt(max(6, brand_size - 1), "brand"),
+        "brand_small": fnt(max(sc(6), brand_size - sc(1)), "brand"),
     }
 
 
@@ -409,8 +416,7 @@ def render_single(items):
     for w in COL_WIDTHS:
         xs.append(xs[-1] + w)
 
-    # Green frame only. No black outer outline.
-    draw.rectangle((FRAME_PAD, FRAME_PAD, CANVAS_W - FRAME_PAD, CANVAS_H - FRAME_PAD), outline=GREEN, width=4)
+    # No full-canvas green frame. The green outline belongs on the sheet only.
 
     draw_header(draw, xs, fonts)
     y = Y0 + HEADER_H
@@ -425,11 +431,11 @@ def render_single(items):
             row_idx += 1
 
     # Sheet outline: green only.
-    draw.rectangle((X0, Y0, X0 + TABLE_W, min(y, BOTTOM_Y)), outline=GREEN, width=3)
+    draw.rectangle((X0, Y0, X0 + TABLE_W, min(y, BOTTOM_Y)), outline=GREEN, width=sc(3))
 
     out = f"{OUTPUT_PREFIX}.png"
     img.convert("RGB").save(out, quality=98, optimize=True)
-    print(f"SUCCESS: Rendered ONE image: rows={row_idx}, row_h={row_h}, sep_h={sep_h}, file={out}")
+    print(f"SUCCESS: Rendered ONE image: rows={row_idx}, row_h={row_h}, sep_h={sep_h}, size={CANVAS_W}x{CANVAS_H}, file={out}")
     return out
 
 
