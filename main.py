@@ -29,23 +29,23 @@ COL_NAMES = ["League", "PST", "MTN", "EST", "Player 1", "Player 2", "BET", "Unit
 COL_WIDTHS = [109, 61, 61, 61, 137, 138, 77, 76, 124, 77, 87]
 TABLE_W = sum(COL_WIDTHS)
 
-BRAND_LEFT = os.environ.get("BRAND_LEFT", "X.COM/BALIHQ")
-BRAND_MID = os.environ.get("BRAND_MID", "OFFICIAL PROPERTY OF BALIHQBETS")
-BRAND_RIGHT = os.environ.get("BRAND_RIGHT", "JOIN.BALIHQBETS.COM")
+BRAND_LEFT = os.environ.get("BRAND_LEFT", "x.com/balihq")
+BRAND_MID = os.environ.get("BRAND_MID", "official property of balihqbets")
+BRAND_RIGHT = os.environ.get("BRAND_RIGHT", "join.balihqbets.com")
 
 # Reference-grade colors.
 BLUE_HEADER_TOP = (50, 128, 190, 255)
 BLUE_HEADER_BOT = (35, 101, 164, 255)
-BLUE_BAR_TOP = (42, 121, 184, 255)
-BLUE_BAR_BOT = (7, 74, 112, 255)
+BLUE_BAR_TOP = (56, 134, 196, 255)
+BLUE_BAR_BOT = (28, 100, 162, 255)
 BLUE_BAR_DARK = (0, 52, 84, 255)
 GRID_BLACK = (0, 0, 0, 235)
 GRID_SOFT = (0, 0, 0, 102)
 OUTLINE_GREEN = (0, 177, 44, 255)
 TEXT_DARK = (0, 0, 0, 255)
 TEXT_WHITE = (255, 255, 255, 255)
-ROW_LIGHT = (238, 248, 250, 174)
-ROW_DARK = (201, 217, 225, 174)
+ROW_LIGHT = (237, 247, 250, 132)
+ROW_DARK = (196, 212, 221, 132)
 LEAGUE_TT_CUP = (244, 223, 27, 255)
 LEAGUE_TT_ELITE = (252, 241, 202, 244)
 LEAGUE_CZECH = (0, 92, 128, 255)
@@ -106,11 +106,11 @@ def _font(size, kind="sheet"):
     return ImageFont.load_default()
 
 
-FONT_HEADER = _font(9, "sheet")
-FONT_CELL = _font(7, "sheet")
-FONT_NAME = _font(7, "sheet")
-FONT_BRAND = _font(15, "brand")
-FONT_BRAND_SMALL = _font(14, "brand")
+FONT_HEADER = _font(10, "sheet")
+FONT_CELL = _font(8, "sheet")
+FONT_NAME = _font(8, "sheet")
+FONT_BRAND = _font(14, "brand")
+FONT_BRAND_SMALL = _font(13, "brand")
 
 
 def _text_size(draw, text, font):
@@ -299,14 +299,14 @@ def _draw_header(draw, x0, xs, y):
 
 
 def _draw_separator(draw, x0, y, sep_h):
+    # Lowercase by design: superchargestraight.ttf renders cleaner in lowercase.
     _draw_gradient_rect(draw, (x0, y, x0 + TABLE_W, y + sep_h), BLUE_BAR_TOP, BLUE_BAR_BOT)
-    draw.line((x0, y + 1, x0 + TABLE_W, y + 1), fill=(95, 160, 205, 150), width=1)
-    draw.line((x0, y, x0 + TABLE_W, y), fill=GRID_BLACK, width=1)
-    draw.line((x0, y + sep_h - 1, x0 + TABLE_W, y + sep_h - 1), fill=GRID_BLACK, width=1)
-    _center_text(draw, (x0 + 6, y, x0 + 260, y + sep_h), BRAND_LEFT, FONT_BRAND, TEXT_WHITE, stroke=1, y_offset=-1)
-    _center_text(draw, (x0 + 250, y, x0 + TABLE_W - 250, y + sep_h), BRAND_MID, FONT_BRAND, TEXT_WHITE, stroke=1, y_offset=-1)
-    _center_text(draw, (x0 + TABLE_W - 256, y, x0 + TABLE_W - 6, y + sep_h), BRAND_RIGHT, FONT_BRAND_SMALL, TEXT_WHITE, stroke=1, y_offset=-1)
-
+    draw.rectangle((x0, y, x0 + TABLE_W, y + sep_h), outline=(0, 0, 0, 245), width=1)
+    draw.line((x0, y + 1, x0 + TABLE_W, y + 1), fill=(126, 187, 226, 150), width=1)
+    draw.line((x0, y + sep_h - 2, x0 + TABLE_W, y + sep_h - 2), fill=(0, 47, 80, 190), width=1)
+    _center_text(draw, (x0 + 8, y, x0 + 258, y + sep_h), BRAND_LEFT.lower(), FONT_BRAND, TEXT_WHITE, stroke=1, y_offset=-1)
+    _center_text(draw, (x0 + 245, y, x0 + TABLE_W - 245, y + sep_h), BRAND_MID.lower(), FONT_BRAND, TEXT_WHITE, stroke=1, y_offset=-1)
+    _center_text(draw, (x0 + TABLE_W - 258, y, x0 + TABLE_W - 8, y + sep_h), BRAND_RIGHT.lower(), FONT_BRAND_SMALL, TEXT_WHITE, stroke=1, y_offset=-1)
 
 def _draw_row(draw, x0, xs, y, row, idx, row_h):
     base = ROW_LIGHT if idx % 2 == 0 else ROW_DARK
@@ -337,17 +337,12 @@ def _draw_row(draw, x0, xs, y, row, idx, row_h):
 def _fit_vertical(rows):
     sep_count = sum(1 for r in rows if r is None) + 1
     data_count = sum(1 for r in rows if r is not None)
-    content_h = CANVAS_H - TOP_Y - BOTTOM_PAD - HEADER_H
+    # Match the reference density. Never crush text or drop rows; grow canvas if the sheet is longer.
     row_h = ROW_H_DEFAULT
     sep_h = SEP_H_DEFAULT
     needed = sep_count * sep_h + data_count * row_h
-    if needed > content_h:
-        row_h = max(15, int((content_h - sep_count * sep_h) / max(1, data_count)))
-        needed = sep_count * sep_h + data_count * row_h
-    # If still too tall, grow canvas. Never delete a row.
     canvas_h = max(CANVAS_H, TOP_Y + HEADER_H + needed + BOTTOM_PAD)
     return row_h, sep_h, canvas_h
-
 
 def create_graphic(rows):
     print("--- STEP 2: CREATING GRAPHIC ---")
