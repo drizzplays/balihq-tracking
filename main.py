@@ -41,12 +41,12 @@ BAR_SHADOW = (0, 45, 78, 255)
 GREEN = (0, 181, 45, 255)
 GREEN_DARK = (0, 83, 31, 255)
 BLACK = (0, 0, 0, 255)
-GRID = (0, 0, 0, 92)
-GRID_SOFT = (0, 0, 0, 32)
+GRID = (0, 0, 0, 118)
+GRID_SOFT = (0, 0, 0, 50)
 WHITE = (255, 255, 255, 255)
 TEXT = (0, 0, 0, 255)
-ROW_LIGHT = (246, 251, 253, 98)
-ROW_DARK = (178, 199, 208, 116)
+ROW_LIGHT = (242, 250, 253, 118)
+ROW_DARK = (181, 201, 210, 118)
 TT_CUP = (245, 224, 19, 255)
 TT_ELITE = (252, 242, 203, 245)
 CZECH = (0, 91, 127, 255)
@@ -63,71 +63,68 @@ ROOT = Path(__file__).resolve().parent
 
 
 def _font_candidates(names):
-    """Find fonts reliably in GitHub Actions.
+    """Return every matching font path, not just the first one.
 
-    The previous renderer could silently fall back to DejaVu if the current
-    working directory was different or if the file lived in /fonts. This scans
-    the repo root, common font folders, then the whole project tree using a
-    case-insensitive match. The exact font path prints in the Actions log.
+    GitHub can contain a bad/placeholder file named like a font.
+    If PIL cannot open it, we skip it and keep searching instead of crashing.
     """
     wanted = {n.lower(): n for n in names}
-    wanted_norm = {re.sub(r"[^a-z0-9]", "", n.lower()) for n in names}
-    roots = [ROOT, Path.cwd(), Path(os.environ.get("GITHUB_WORKSPACE", "/github/workspace"))]
-    folders = []
-    for r in roots:
-        try:
-            if r.exists():
-                folders += [r, r / "fonts", r / "Fonts", r / "assets", r / "Assets", r / "font"]
-        except Exception:
-            pass
+    folders = [ROOT / "fonts", ROOT / "Fonts", ROOT, ROOT / "assets", ROOT / "Assets", ROOT / "font"]
+    hits = []
 
     for folder in folders:
         if not folder.exists():
             continue
         for child in folder.iterdir():
-            if child.is_file() and (child.name.lower() in wanted or re.sub(r"[^a-z0-9]", "", child.name.lower()) in wanted_norm):
-                return str(child)
+            if child.is_file() and child.name.lower() in wanted and child not in hits:
+                hits.append(child)
 
-    for child in ROOT.rglob("*.ttf"):
-        if child.name.lower() in wanted or re.sub(r"[^a-z0-9]", "", child.name.lower()) in wanted_norm:
-            return str(child)
-    for child in ROOT.rglob("*.otf"):
-        if child.name.lower() in wanted or re.sub(r"[^a-z0-9]", "", child.name.lower()) in wanted_norm:
-            return str(child)
-    for base in [Path.cwd(), Path(os.environ.get("GITHUB_WORKSPACE", "/github/workspace"))]:
-        try:
-            for child in list(base.rglob("*.ttf")) + list(base.rglob("*.otf")):
-                if child.name.lower() in wanted or re.sub(r"[^a-z0-9]", "", child.name.lower()) in wanted_norm:
-                    return str(child)
-        except Exception:
-            pass
-    print(f"FONT DEBUG: looked for {names}; cwd={Path.cwd()}; root={ROOT}")
-    return None
+    for ext in ("*.ttf", "*.otf"):
+        for child in ROOT.rglob(ext):
+            if child.name.lower() in wanted and child not in hits:
+                hits.append(child)
+
+    return [str(x) for x in hits]
 
 
 _LOADED_FONT_PATHS = {}
+_BAD_FONT_PATHS = set()
 
 
 def font(size, role="body"):
-    # Sheet text uses normal Lexend Regular — the same family/look Google Sheets uses.
-    # Put the font at: ./fonts/Lexend-Regular.ttf
     if role == "brand":
-        names = ["superchargestraight.ttf", "SuperchargeStraight.ttf", "supercharge_straight.ttf", "supercharge-straight.ttf"]
-    elif role == "header":
-        names = ["Lexend-Regular.ttf", "Lexend.Regular.ttf", "Lexend.ttf", "Lexend-Regular.otf", "LexendRegular.ttf"]
+        names = [
+            "superchargestraight.ttf",
+            "SuperchargeStraight.ttf",
+            "supercharge_straight.ttf",
+            "Supercharge Straight.ttf",
+        ]
     else:
-        names = ["Lexend-Regular.ttf", "Lexend.ttf", "Lexend-Regular.otf"]
+        names = [
+            "Lexend-Regular.ttf",
+            "Lexend Regular.ttf",
+            "Lexend-Regular.otf",
+            "Lexend.ttf",
+            "Lexend-Regular-VariableFont_wght.ttf",
+            "Lexend.Variable.ttf",
+            "Lexend.Regular.ttf",
+        ]
 
-    found = _font_candidates(names)
-    if found:
-        key = f"{role}:{Path(found).name}"
-        if key not in _LOADED_FONT_PATHS:
-            print(f"FONT OK [{role}]: {found}")
-            _LOADED_FONT_PATHS[key] = found
-        return ImageFont.truetype(found, size)
+    for found in _font_candidates(names):
+        try:
+            loaded = ImageFont.truetype(found, size)
+            key = f"{role}:{Path(found).name}"
+            if key not in _LOADED_FONT_PATHS:
+                print(f"FONT OK [{role}]: {found}")
+                _LOADED_FONT_PATHS[key] = found
+            return loaded
+        except Exception as e:
+            if found not in _BAD_FONT_PATHS:
+                print(f"FONT SKIPPED [{role}]: {found} ({e})")
+                _BAD_FONT_PATHS.add(found)
+            continue
 
-    # Do NOT fail silently anymore. The log tells you exactly why it looks wrong.
-    print(f"FONT MISSING [{role}]: expected one of {names} in repo root or /fonts. Falling back to system font.")
+    print(f"FONT MISSING [{role}]: none of these loaded: {names}")
     fallbacks = [
         "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
         "/usr/share/fonts/truetype/liberation2/LiberationSans-Regular.ttf",
@@ -151,14 +148,14 @@ FONT_BRAND_SMALL = font(10, "brand")
 
 def build_fonts(row_h, sep_h):
     # One-image mode: shrink text only when the sheet has more rows than the reference can hold.
-    body_size = max(7, min(10, row_h - 5))
-    brand_size = max(7, min(9, sep_h - 9))
+    body_size = max(6, min(9, row_h - 4))
+    brand_size = max(7, min(9, sep_h - 11))
     return {
         "header": font(10, "header"),
         "body": font(body_size, "body"),
         "name": font(body_size, "body"),
         "brand": font(brand_size, "brand"),
-        "brand_small": font(max(7, brand_size - 1), "brand"),
+        "brand_small": font(max(6, brand_size - 1), "brand"),
     }
 
 
@@ -313,16 +310,16 @@ def draw_header(draw, xs):
         center_text(draw, (x1+5,Y0,x2-16,Y0+HEADER_H), label, FONT_HEADER, WHITE, yoff=-1)
         draw.polygon([(x2-13,Y0+8),(x2-5,Y0+8),(x2-9,Y0+15)], fill=(224,240,250,240))
         draw.line((x2,Y0,x2,Y0+HEADER_H), fill=(0,42,79,255), width=1)
-    draw.line((X0,Y0,X0+TABLE_W,Y0), fill=GREEN_DARK, width=1)
-    draw.line((X0,Y0+HEADER_H,X0+TABLE_W,Y0+HEADER_H), fill=GREEN_DARK, width=1)
+    draw.line((X0,Y0,X0+TABLE_W,Y0), fill=GREEN, width=1)
+    draw.line((X0,Y0+HEADER_H,X0+TABLE_W,Y0+HEADER_H), fill=(0,42,79,210), width=1)
 
 
 def draw_bar(draw, y):
     gradient(draw, (X0,y,X0+TABLE_W,y+SEP_H), BAR_TOP, BAR_BOT)
     draw.line((X0,y+1,X0+TABLE_W,y+1), fill=(126,186,226,135), width=1)
     draw.line((X0,y+SEP_H-2,X0+TABLE_W,y+SEP_H-2), fill=BAR_SHADOW, width=1)
-    draw.line((X0, y, X0+TABLE_W, y), fill=GREEN_DARK, width=1)
-    draw.line((X0, y+SEP_H-1, X0+TABLE_W, y+SEP_H-1), fill=GREEN_DARK, width=1)
+    draw.line((X0, y, X0+TABLE_W, y), fill=(0,42,79,220), width=1)
+    draw.line((X0, y+SEP_H-1, X0+TABLE_W, y+SEP_H-1), fill=(0,42,79,220), width=1)
     center_text(draw, (X0+7,y,X0+258,y+SEP_H), BRAND_LEFT, FONT_BRAND, WHITE, stroke=1, yoff=-1)
     center_text(draw, (X0+242,y,X0+TABLE_W-242,y+SEP_H), BRAND_MID, FONT_BRAND, WHITE, stroke=1, yoff=-1)
     center_text(draw, (X0+TABLE_W-258,y,X0+TABLE_W-7,y+SEP_H), BRAND_RIGHT, FONT_BRAND_SMALL, WHITE, stroke=1, yoff=-1)
@@ -334,10 +331,7 @@ def draw_row(draw, xs, y, row, idx):
     draw.rectangle((xs[0],y,xs[1],y+ROW_H), fill=lf)
     draw.rectangle((xs[6],y,xs[7],y+ROW_H), fill=bf)
     for j,xx in enumerate(xs):
-        if j in (0, len(xs)-1):
-            draw.line((xx,y,xx,y+ROW_H), fill=GREEN, width=2)
-        else:
-            draw.line((xx,y,xx,y+ROW_H), fill=GRID, width=2 if j in (8,9) else 1)
+        draw.line((xx,y,xx,y+ROW_H), fill=GRID, width=2 if j in (0,8,9,len(xs)-1) else 1)
     draw.line((X0,y+ROW_H,X0+TABLE_W,y+ROW_H), fill=GRID_SOFT, width=1)
     for i,c in enumerate(row):
         f = FONT_NAME if i in (4,5) else FONT_BODY
@@ -391,16 +385,16 @@ def draw_header2(draw, xs, fonts):
         center_text(draw, (x1+5,Y0,x2-16,Y0+HEADER_H), label, fonts["header"], WHITE, yoff=-1)
         draw.polygon([(x2-13,Y0+8),(x2-5,Y0+8),(x2-9,Y0+15)], fill=(224,240,250,240))
         draw.line((x2,Y0,x2,Y0+HEADER_H), fill=(0,42,79,255), width=1)
-    draw.line((X0,Y0,X0+TABLE_W,Y0), fill=GREEN_DARK, width=1)
-    draw.line((X0,Y0+HEADER_H,X0+TABLE_W,Y0+HEADER_H), fill=GREEN_DARK, width=1)
+    draw.line((X0,Y0,X0+TABLE_W,Y0), fill=GREEN, width=1)
+    draw.line((X0,Y0+HEADER_H,X0+TABLE_W,Y0+HEADER_H), fill=(0,42,79,210), width=1)
 
 
 def draw_bar2(draw, y, sep_h, fonts):
     gradient(draw, (X0,y,X0+TABLE_W,y+sep_h), BAR_TOP, BAR_BOT)
     draw.line((X0,y+1,X0+TABLE_W,y+1), fill=(126,186,226,135), width=1)
     draw.line((X0,y+sep_h-2,X0+TABLE_W,y+sep_h-2), fill=BAR_SHADOW, width=1)
-    draw.line((X0, y, X0+TABLE_W, y), fill=GREEN_DARK, width=1)
-    draw.line((X0, y+sep_h-1, X0+TABLE_W, y+sep_h-1), fill=GREEN_DARK, width=1)
+    draw.line((X0, y, X0+TABLE_W, y), fill=(0,42,79,220), width=1)
+    draw.line((X0, y+sep_h-1, X0+TABLE_W, y+sep_h-1), fill=(0,42,79,220), width=1)
     center_text(draw, (X0+7,y,X0+258,y+sep_h), BRAND_LEFT.lower(), fonts["brand"], WHITE, stroke=0, yoff=-1)
     center_text(draw, (X0+242,y,X0+TABLE_W-242,y+sep_h), BRAND_MID.lower(), fonts["brand"], WHITE, stroke=0, yoff=-1)
     center_text(draw, (X0+TABLE_W-258,y,X0+TABLE_W-7,y+sep_h), BRAND_RIGHT.lower(), fonts["brand_small"], WHITE, stroke=0, yoff=-1)
@@ -412,10 +406,7 @@ def draw_row2(draw, xs, y, row, idx, row_h, fonts):
     draw.rectangle((xs[0],y,xs[1],y+row_h), fill=lf)
     draw.rectangle((xs[6],y,xs[7],y+row_h), fill=bf)
     for j,xx in enumerate(xs):
-        if j in (0, len(xs)-1):
-            draw.line((xx,y,xx,y+row_h), fill=GREEN, width=2)
-        else:
-            draw.line((xx,y,xx,y+row_h), fill=GRID, width=2 if j in (8,9) else 1)
+        draw.line((xx,y,xx,y+row_h), fill=GRID, width=2 if j in (0,8,9,len(xs)-1) else 1)
     draw.line((X0,y+row_h,X0+TABLE_W,y+row_h), fill=GRID_SOFT, width=1)
     for i,c in enumerate(row):
         f = fonts["name"] if i in (4,5) else fonts["body"]
@@ -433,7 +424,7 @@ def render_single(items):
     for w in COL_WIDTHS:
         xs.append(xs[-1]+w)
 
-    draw.rectangle((FRAME_PAD, FRAME_PAD, CANVAS_W-FRAME_PAD, CANVAS_H-FRAME_PAD), outline=GREEN, width=5)
+    draw.rectangle((FRAME_PAD, FRAME_PAD, CANVAS_W-FRAME_PAD, CANVAS_H-FRAME_PAD), outline=GREEN, width=4)
 
     draw_header2(draw, xs, fonts)
     y = Y0 + HEADER_H
@@ -447,12 +438,7 @@ def render_single(items):
             y += row_h
             row_idx += 1
 
-    edge_y = min(y, BOTTOM_Y)
-    draw.rectangle((X0,Y0,X0+TABLE_W,edge_y), outline=GREEN, width=3)
-    draw.line((X0, Y0, X0, edge_y), fill=GREEN, width=3)
-    draw.line((X0+TABLE_W, Y0, X0+TABLE_W, edge_y), fill=GREEN, width=3)
-    draw.line((X0, Y0, X0+TABLE_W, Y0), fill=GREEN, width=3)
-    draw.line((X0, edge_y, X0+TABLE_W, edge_y), fill=GREEN, width=3)
+    draw.rectangle((X0,Y0,X0+TABLE_W,min(y,BOTTOM_Y)), outline=GREEN, width=3)
     out = f"{OUTPUT_PREFIX}.png"
     img.convert("RGB").save(out, quality=98, optimize=True)
     print(f"SUCCESS: Rendered ONE image: rows={row_idx}, row_h={row_h}, sep_h={sep_h}, file={out}")
