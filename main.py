@@ -17,37 +17,41 @@ OUTPUT_FILENAME = os.environ.get("OUTPUT_FILENAME", "output.png")
 
 CANVAS_W = int(os.environ.get("CANVAS_W", "1038"))
 CANVAS_H = int(os.environ.get("CANVAS_H", "757"))
-MARGIN_X = int(os.environ.get("MARGIN_X", "14"))
-TOP_Y = int(os.environ.get("TOP_Y", "14"))
+MARGIN_X = int(os.environ.get("MARGIN_X", "15"))
+TOP_Y = int(os.environ.get("TOP_Y", "15"))
 HEADER_H = int(os.environ.get("HEADER_H", "21"))
-ROW_H = int(os.environ.get("ROW_H", "18"))
-SEP_H = int(os.environ.get("SEP_H", "20"))
-BOTTOM_PAD = int(os.environ.get("BOTTOM_PAD", "14"))
+ROW_H_DEFAULT = int(os.environ.get("ROW_H", "20"))
+SEP_H_DEFAULT = int(os.environ.get("SEP_H", "20"))
+BOTTOM_PAD = int(os.environ.get("BOTTOM_PAD", "12"))
 
 COL_NAMES = ["League", "PST", "MTN", "EST", "Player 1", "Player 2", "BET", "Unit", "History", "Split %", "Set Break Down"]
-COL_WIDTHS = [110, 60, 60, 60, 137, 137, 77, 76, 124, 77, 92]
+# Sum = 1008. On a 1038 canvas with 15px margins this lands exactly like the reference.
+COL_WIDTHS = [109, 61, 61, 61, 137, 138, 77, 76, 124, 77, 87]
 TABLE_W = sum(COL_WIDTHS)
 
 BRAND_LEFT = os.environ.get("BRAND_LEFT", "X.COM/BALIHQ")
 BRAND_MID = os.environ.get("BRAND_MID", "OFFICIAL PROPERTY OF BALIHQBETS")
 BRAND_RIGHT = os.environ.get("BRAND_RIGHT", "JOIN.BALIHQBETS.COM")
 
-BLUE_TOP = (43, 123, 185, 255)
-BLUE = (37, 105, 164, 255)
-BLUE_DARK = (5, 69, 105, 255)
-GRID = (0, 0, 0, 225)
-GRID_SOFT = (0, 0, 0, 120)
-OUTLINE_GREEN = (0, 165, 39, 255)
+# Reference-grade colors.
+BLUE_HEADER_TOP = (50, 128, 190, 255)
+BLUE_HEADER_BOT = (35, 101, 164, 255)
+BLUE_BAR_TOP = (42, 121, 184, 255)
+BLUE_BAR_BOT = (7, 74, 112, 255)
+BLUE_BAR_DARK = (0, 52, 84, 255)
+GRID_BLACK = (0, 0, 0, 235)
+GRID_SOFT = (0, 0, 0, 102)
+OUTLINE_GREEN = (0, 177, 44, 255)
 TEXT_DARK = (0, 0, 0, 255)
 TEXT_WHITE = (255, 255, 255, 255)
-ROW_LIGHT = (238, 248, 250, 158)
-ROW_DARK = (204, 219, 226, 158)
-LEAGUE_TT_CUP = (241, 221, 31, 248)
-LEAGUE_TT_ELITE = (252, 239, 196, 234)
-LEAGUE_CZECH = (0, 91, 126, 250)
-BET_UNDER = (0, 88, 128, 252)
-BET_OVER = (246, 238, 214, 238)
-BET_SPLIT = (229, 229, 229, 238)
+ROW_LIGHT = (238, 248, 250, 174)
+ROW_DARK = (201, 217, 225, 174)
+LEAGUE_TT_CUP = (244, 223, 27, 255)
+LEAGUE_TT_ELITE = (252, 241, 202, 244)
+LEAGUE_CZECH = (0, 92, 128, 255)
+BET_UNDER = (0, 91, 132, 255)
+BET_OVER = (248, 239, 214, 244)
+BET_SPLIT = (230, 230, 230, 244)
 
 TIME_RE = re.compile(r"^\d{1,2}:\d{2}\s*(AM|PM)$", re.I)
 HIST_RE = re.compile(r"^\d+\s*/\s*\d+$")
@@ -75,29 +79,38 @@ def get_data():
         sys.exit(1)
 
 
-def _font(size, bold=False):
-    paths = []
-    if bold:
-        paths += [
-            "/usr/share/fonts/truetype/dejavu/DejaVuSansCondensed-Bold.ttf",
-            "/usr/share/fonts/truetype/liberation2/LiberationSans-Bold.ttf",
-            "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+def _font(size, kind="sheet"):
+    """Loads requested repo fonts first. Put both .ttf files beside main.py/background.png."""
+    root = Path(__file__).resolve().parent
+    preferred = []
+    if kind == "brand":
+        preferred += [
+            root / "superchargestraight.ttf",
+            root / "SuperchargeStraight.ttf",
+            Path("superchargestraight.ttf"),
         ]
-    paths += [
-        "/usr/share/fonts/truetype/dejavu/DejaVuSansCondensed.ttf",
+    else:
+        preferred += [
+            root / "Lexend-Regular.ttf",
+            root / "lexend-regular.ttf",
+            Path("Lexend-Regular.ttf"),
+        ]
+    fallback = [
+        "/usr/share/fonts/truetype/dejavu/DejaVuSansCondensed-Bold.ttf",
         "/usr/share/fonts/truetype/liberation2/LiberationSans-Regular.ttf",
         "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
     ]
-    for p in paths:
-        if os.path.exists(p):
-            return ImageFont.truetype(p, size)
+    for p in preferred + [Path(x) for x in fallback]:
+        if Path(p).exists():
+            return ImageFont.truetype(str(p), size)
     return ImageFont.load_default()
 
-FONT_HEADER = _font(9, True)
-FONT_CELL = _font(7, True)
-FONT_NAME = _font(7, True)
-FONT_BRAND = _font(14, True)
-FONT_BRAND_SMALL = _font(13, True)
+
+FONT_HEADER = _font(9, "sheet")
+FONT_CELL = _font(7, "sheet")
+FONT_NAME = _font(7, "sheet")
+FONT_BRAND = _font(15, "brand")
+FONT_BRAND_SMALL = _font(14, "brand")
 
 
 def _text_size(draw, text, font):
@@ -117,13 +130,18 @@ def _fit_text(draw, text, font, max_w):
     return text + ell if text else ell
 
 
-def _center_text(draw, box, text, font, fill, stroke=0):
+def _center_text(draw, box, text, font, fill, stroke=0, y_offset=0):
     x1, y1, x2, y2 = box
     text = _fit_text(draw, text, font, max(1, x2 - x1 - 6))
     tw, th = _text_size(draw, text, font)
-    draw.text((x1 + (x2 - x1 - tw) / 2, y1 + (y2 - y1 - th) / 2 - 1), text,
-              font=font, fill=fill, stroke_width=stroke,
-              stroke_fill=(0, 0, 0, 190) if stroke else None)
+    draw.text(
+        (x1 + (x2 - x1 - tw) / 2, y1 + (y2 - y1 - th) / 2 - 1 + y_offset),
+        text,
+        font=font,
+        fill=fill,
+        stroke_width=stroke,
+        stroke_fill=(0, 0, 0, 205) if stroke else None,
+    )
 
 
 def _is_separator_raw(row):
@@ -139,8 +157,6 @@ def _extract_row(raw):
         return "HEADER"
 
     out = [""] * len(COL_NAMES)
-
-    # Find league first.
     league_i = None
     for i, c in enumerate(cells):
         u = c.upper()
@@ -151,13 +167,11 @@ def _extract_row(raw):
     if league_i is None:
         return None
 
-    # First three times after league are PST/MTN/EST.
     times = [(i, c) for i, c in enumerate(cells[league_i + 1:], start=league_i + 1) if TIME_RE.match(c)]
     for k in range(min(3, len(times))):
         out[1 + k] = times[k][1]
     after_time = times[2][0] + 1 if len(times) >= 3 else league_i + 4
 
-    # Bet/history/percent/set can be detected from the right side even if Google adds/omits blank columns.
     bet_i = None
     for i in range(after_time, len(cells)):
         u = cells[i].upper()
@@ -165,7 +179,8 @@ def _extract_row(raw):
             bet_i = i
             out[6] = u
             break
-    name_cells = [c for c in cells[after_time:bet_i] if c] if bet_i else []
+
+    name_cells = [c for c in cells[after_time:bet_i] if c] if bet_i is not None else []
     if name_cells:
         out[4] = name_cells[0]
     if len(name_cells) > 1:
@@ -181,7 +196,6 @@ def _extract_row(raw):
         elif not out[10] and SET_RE.match(c):
             out[10] = c.replace(" ", "")
         elif not out[7]:
-            # Unit is the first remaining small numeric value after BET.
             try:
                 float(c)
                 out[7] = c.rstrip("0").rstrip(".") if "." in c else c
@@ -215,8 +229,8 @@ def _league_color(league):
     if "CZECH" in league:
         return LEAGUE_CZECH, TEXT_WHITE
     if "TT CUP" in league:
-        return LEAGUE_TT_CUP, (26, 24, 0, 255)
-    return LEAGUE_TT_ELITE, (25, 25, 25, 255)
+        return LEAGUE_TT_CUP, (30, 26, 0, 255)
+    return LEAGUE_TT_ELITE, (18, 18, 18, 255)
 
 
 def _bet_color(bet):
@@ -228,13 +242,13 @@ def _bet_color(bet):
     return BET_SPLIT, TEXT_DARK
 
 
-def _prep_background():
+def _prep_background(canvas_h):
     if not Path(BG_FILENAME).exists():
         print(f"ERROR: {BG_FILENAME} is missing from repo.")
         sys.exit(1)
     bg = Image.open(BG_FILENAME).convert("RGB")
     bw, bh = bg.size
-    target = CANVAS_W / CANVAS_H
+    target = CANVAS_W / canvas_h
     ratio = bw / bh
     if ratio > target:
         nw = int(bh * target)
@@ -244,9 +258,10 @@ def _prep_background():
         nh = int(bw / target)
         top = max(0, (bh - nh) // 2)
         bg = bg.crop((0, top, bw, top + nh))
-    bg = bg.resize((CANVAS_W, CANVAS_H), Image.Resampling.LANCZOS)
-    bg = ImageEnhance.Contrast(bg).enhance(1.08)
-    bg = ImageEnhance.Sharpness(bg).enhance(1.15)
+    bg = bg.resize((CANVAS_W, canvas_h), Image.Resampling.LANCZOS)
+    bg = ImageEnhance.Contrast(bg).enhance(1.10)
+    bg = ImageEnhance.Sharpness(bg).enhance(1.18)
+    bg = ImageEnhance.Color(bg).enhance(1.08)
     return bg.convert("RGBA")
 
 
@@ -259,40 +274,53 @@ def _draw_gradient_rect(draw, xy, top, bottom):
         draw.line((x1, y1 + yy, x2, y1 + yy), fill=col)
 
 
+def _draw_tiny_filter(draw, x, y, color=(224, 240, 250, 255)):
+    draw.polygon([(x - 4, y - 3), (x + 4, y - 3), (x, y + 4)], fill=color)
+
+
 def _draw_header(draw, x0, xs, y):
-    _draw_gradient_rect(draw, (x0, y, x0 + TABLE_W, y + HEADER_H), BLUE_TOP, BLUE)
+    _draw_gradient_rect(draw, (x0, y, x0 + TABLE_W, y + HEADER_H), BLUE_HEADER_TOP, BLUE_HEADER_BOT)
+    # subtle top shine
+    draw.line((x0 + 1, y + 1, x0 + TABLE_W - 1, y + 1), fill=(117, 178, 219, 115), width=1)
     for i, name in enumerate(COL_NAMES):
         x1, x2 = xs[i], xs[i + 1]
-        draw.line((x2, y, x2, y + HEADER_H), fill=(0, 44, 82, 255), width=1)
+        draw.line((x2, y, x2, y + HEADER_H), fill=(0, 43, 80, 255), width=1)
         label = "Set Break D..." if name == "Set Break Down" else name
         _center_text(draw, (x1 + 4, y, x2 - 15, y + HEADER_H), label, FONT_HEADER, TEXT_WHITE)
-        cx, cy = x2 - 10, y + HEADER_H // 2 + 1
-        draw.polygon([(cx - 3, cy - 2), (cx + 3, cy - 2), (cx, cy + 3)], fill=(222, 239, 248, 255))
-    draw.line((x0, y, x0 + TABLE_W, y), fill=(0, 0, 0, 255), width=2)
-    draw.line((x0, y + HEADER_H, x0 + TABLE_W, y + HEADER_H), fill=(0, 0, 0, 255), width=2)
+        _draw_tiny_filter(draw, x2 - 10, y + HEADER_H // 2 + 1)
+    # small eye-like pills in first and bet headers to mimic the sheet UI
+    for col in (0, 6):
+        cx = xs[col] + 14
+        cy = y + HEADER_H // 2
+        draw.ellipse((cx - 4, cy - 3, cx + 4, cy + 3), outline=(218, 239, 250, 210), width=1)
+        draw.ellipse((cx - 1, cy - 1, cx + 1, cy + 1), fill=(218, 239, 250, 210))
+    draw.line((x0, y, x0 + TABLE_W, y), fill=GRID_BLACK, width=2)
+    draw.line((x0, y + HEADER_H, x0 + TABLE_W, y + HEADER_H), fill=GRID_BLACK, width=2)
 
 
-def _draw_separator(draw, x0, y):
-    _draw_gradient_rect(draw, (x0, y, x0 + TABLE_W, y + SEP_H), BLUE_TOP, BLUE_DARK)
-    draw.line((x0, y, x0 + TABLE_W, y), fill=(0, 0, 0, 255), width=1)
-    draw.line((x0, y + SEP_H - 1, x0 + TABLE_W, y + SEP_H - 1), fill=(0, 0, 0, 255), width=1)
-    _center_text(draw, (x0 + 4, y, x0 + 250, y + SEP_H), BRAND_LEFT, FONT_BRAND, TEXT_WHITE, stroke=1)
-    _center_text(draw, (x0 + 250, y, x0 + TABLE_W - 250, y + SEP_H), BRAND_MID, FONT_BRAND, TEXT_WHITE, stroke=1)
-    _center_text(draw, (x0 + TABLE_W - 250, y, x0 + TABLE_W - 4, y + SEP_H), BRAND_RIGHT, FONT_BRAND_SMALL, TEXT_WHITE, stroke=1)
+def _draw_separator(draw, x0, y, sep_h):
+    _draw_gradient_rect(draw, (x0, y, x0 + TABLE_W, y + sep_h), BLUE_BAR_TOP, BLUE_BAR_BOT)
+    draw.line((x0, y + 1, x0 + TABLE_W, y + 1), fill=(95, 160, 205, 150), width=1)
+    draw.line((x0, y, x0 + TABLE_W, y), fill=GRID_BLACK, width=1)
+    draw.line((x0, y + sep_h - 1, x0 + TABLE_W, y + sep_h - 1), fill=GRID_BLACK, width=1)
+    _center_text(draw, (x0 + 6, y, x0 + 260, y + sep_h), BRAND_LEFT, FONT_BRAND, TEXT_WHITE, stroke=1, y_offset=-1)
+    _center_text(draw, (x0 + 250, y, x0 + TABLE_W - 250, y + sep_h), BRAND_MID, FONT_BRAND, TEXT_WHITE, stroke=1, y_offset=-1)
+    _center_text(draw, (x0 + TABLE_W - 256, y, x0 + TABLE_W - 6, y + sep_h), BRAND_RIGHT, FONT_BRAND_SMALL, TEXT_WHITE, stroke=1, y_offset=-1)
 
 
-def _draw_row(draw, x0, xs, y, row, idx):
+def _draw_row(draw, x0, xs, y, row, idx, row_h):
     base = ROW_LIGHT if idx % 2 == 0 else ROW_DARK
-    draw.rectangle((x0, y, x0 + TABLE_W, y + ROW_H), fill=base)
+    draw.rectangle((x0, y, x0 + TABLE_W, y + row_h), fill=base)
     league_fill, league_text = _league_color(row[0])
     bet_fill, bet_text = _bet_color(row[6])
-    draw.rectangle((xs[0], y, xs[1], y + ROW_H), fill=league_fill)
-    draw.rectangle((xs[6], y, xs[7], y + ROW_H), fill=bet_fill)
+    draw.rectangle((xs[0], y, xs[1], y + row_h), fill=league_fill)
+    draw.rectangle((xs[6], y, xs[7], y + row_h), fill=bet_fill)
 
+    # right-side dark separators in the reference are heavier.
     for j, xx in enumerate(xs):
         width = 3 if j in (0, 8, 9, len(xs) - 1) else 1
-        draw.line((xx, y, xx, y + ROW_H), fill=GRID, width=width)
-    draw.line((x0, y + ROW_H, x0 + TABLE_W, y + ROW_H), fill=GRID_SOFT, width=1)
+        draw.line((xx, y, xx, y + row_h), fill=GRID_BLACK, width=width)
+    draw.line((x0, y + row_h, x0 + TABLE_W, y + row_h), fill=GRID_SOFT, width=1)
 
     for i, cell in enumerate(row):
         font = FONT_NAME if i in (4, 5) else FONT_CELL
@@ -303,38 +331,30 @@ def _draw_row(draw, x0, xs, y, row, idx):
         elif i == 6:
             fill = bet_text
             text = str(cell).upper()
-        _center_text(draw, (xs[i] + 2, y, xs[i + 1] - 2, y + ROW_H), text, font, fill)
+        _center_text(draw, (xs[i] + 2, y, xs[i + 1] - 2, y + row_h), text, font, fill)
 
 
-def _auto_fit_metrics(rows):
+def _fit_vertical(rows):
+    sep_count = sum(1 for r in rows if r is None) + 1
+    data_count = sum(1 for r in rows if r is not None)
     content_h = CANVAS_H - TOP_Y - BOTTOM_PAD - HEADER_H
-    separators = sum(1 for r in rows if r is None) + 1
-    regular = sum(1 for r in rows if r is not None)
-    row_h = ROW_H
-    sep_h = SEP_H
-    needed = separators * sep_h + regular * row_h
+    row_h = ROW_H_DEFAULT
+    sep_h = SEP_H_DEFAULT
+    needed = sep_count * sep_h + data_count * row_h
     if needed > content_h:
-        # Never drop rows. Compress first, then extend canvas only if absolutely required.
-        row_h = max(15, int((content_h - separators * sep_h) / max(1, regular)))
-        needed = separators * sep_h + regular * row_h
-    return row_h, sep_h, needed
+        row_h = max(15, int((content_h - sep_count * sep_h) / max(1, data_count)))
+        needed = sep_count * sep_h + data_count * row_h
+    # If still too tall, grow canvas. Never delete a row.
+    canvas_h = max(CANVAS_H, TOP_Y + HEADER_H + needed + BOTTOM_PAD)
+    return row_h, sep_h, canvas_h
 
 
 def create_graphic(rows):
-    global ROW_H, CANVAS_H
     print("--- STEP 2: CREATING GRAPHIC ---")
     try:
         data_rows = _normalize_rows(rows)
-        row_h, sep_h, needed = _auto_fit_metrics(data_rows)
-        ROW_H = row_h
-        canvas_h = max(CANVAS_H, TOP_Y + HEADER_H + needed + BOTTOM_PAD)
-
-        old_h = CANVAS_H
-        CANVAS_H = canvas_h
-        img = _prep_background()
-        CANVAS_H = old_h
-        if canvas_h != old_h:
-            img = img.resize((CANVAS_W, canvas_h), Image.Resampling.LANCZOS)
+        row_h, sep_h, canvas_h = _fit_vertical(data_rows)
+        img = _prep_background(canvas_h)
         draw = ImageDraw.Draw(img, "RGBA")
 
         x0 = MARGIN_X
@@ -343,15 +363,17 @@ def create_graphic(rows):
         for w in COL_WIDTHS:
             xs.append(xs[-1] + w)
 
+        # Pro card shadow + neon frame.
         shadow = Image.new("RGBA", img.size, (0, 0, 0, 0))
         sd = ImageDraw.Draw(shadow, "RGBA")
-        sd.rounded_rectangle((10, 10, CANVAS_W - 8, table_bottom + 2), radius=6, fill=(0, 0, 0, 90))
-        shadow = shadow.filter(ImageFilter.GaussianBlur(2))
+        sd.rounded_rectangle((10, 10, CANVAS_W - 7, table_bottom + 3), radius=6, fill=(0, 0, 0, 110))
+        shadow = shadow.filter(ImageFilter.GaussianBlur(2.2))
         img.alpha_composite(shadow)
         draw = ImageDraw.Draw(img, "RGBA")
 
         draw.rounded_rectangle((8, 8, CANVAS_W - 8, table_bottom + 6), radius=5, outline=OUTLINE_GREEN, width=5)
-        draw.rectangle((x0, TOP_Y, x0 + TABLE_W, table_bottom), fill=(225, 245, 248, 25))
+        draw.rounded_rectangle((12, 12, CANVAS_W - 12, table_bottom + 2), radius=3, outline=(0, 78, 21, 210), width=1)
+        draw.rectangle((x0, TOP_Y, x0 + TABLE_W, table_bottom), fill=(225, 245, 248, 12))
 
         y = TOP_Y
         _draw_header(draw, x0, xs, y)
@@ -362,18 +384,18 @@ def create_graphic(rows):
         for row in data_rows:
             if row is None:
                 if not last_was_sep:
-                    _draw_separator(draw, x0, y)
+                    _draw_separator(draw, x0, y, sep_h)
                     y += sep_h
                     last_was_sep = True
                 continue
-            _draw_row(draw, x0, xs, y, row, row_count)
-            y += ROW_H
+            _draw_row(draw, x0, xs, y, row, row_count, row_h)
+            y += row_h
             row_count += 1
             last_was_sep = False
 
-        _draw_separator(draw, x0, y)
+        _draw_separator(draw, x0, y, sep_h)
         y += sep_h
-        draw.rectangle((x0, TOP_Y, x0 + TABLE_W, y), outline=(0, 0, 0, 255), width=2)
+        draw.rectangle((x0, TOP_Y, x0 + TABLE_W, y), outline=GRID_BLACK, width=2)
 
         img.convert("RGB").save(OUTPUT_FILENAME, quality=98, optimize=True)
         print(f"SUCCESS: Rendered {row_count} rows as {OUTPUT_FILENAME} ({CANVAS_W}x{canvas_h}).")
