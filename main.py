@@ -70,9 +70,10 @@ SET_RE = re.compile(r"^\d+\s*-\s*\d+\s*-\s*\d+$")
 # =========================
 # FONT FIX: download valid Lexend every run if local file is bad/missing
 # =========================
-LEXEND_URLS = {
+FONT_URLS = {
     "Lexend-Regular.ttf": "https://raw.githubusercontent.com/google/fonts/main/ofl/lexend/static/Lexend-Regular.ttf",
     "Lexend-Bold.ttf": "https://raw.githubusercontent.com/google/fonts/main/ofl/lexend/static/Lexend-Bold.ttf",
+    "BebasNeue-Regular.ttf": "https://raw.githubusercontent.com/google/fonts/main/ofl/bebasneue/BebasNeue-Regular.ttf",
 }
 
 
@@ -89,7 +90,7 @@ def font_is_valid(path: Path) -> bool:
 def download_font(filename: str) -> Path:
     FONTS_DIR.mkdir(exist_ok=True)
     path = FONTS_DIR / filename
-    url = LEXEND_URLS[filename]
+    url = FONT_URLS[filename]
     print(f"FONT DOWNLOAD: {filename}")
     r = requests.get(url, timeout=30)
     r.raise_for_status()
@@ -115,20 +116,36 @@ def get_lexend(filename: str) -> Path:
 
 
 def find_brand_font() -> Path | None:
-    names = {
-        "superchargestraight.ttf",
+    # The blue filler/banner strip should use Bebas Neue.
+    # Put the file here: /fonts/BebasNeue-Regular.ttf
+    preferred_names = {
+        "bebasneue-regular.ttf",
+        "bebas neue regular.ttf",
+        "bebasneue.ttf",
+        "bebas-neue.ttf",
+    }
+    fallback_names = {
         "superchargestraight.ttf",
         "supercharge straight.ttf",
         "supercharge_straight.ttf",
     }
-    for folder in [FONTS_DIR, ROOT, ROOT / "assets"]:
-        if not folder.exists():
-            continue
-        for p in folder.iterdir():
-            if p.is_file() and p.name.lower() in names and font_is_valid(p):
-                print(f"BRAND FONT OK: {p}")
-                return p
-    print("BRAND FONT MISSING/BAD: using fallback for filler text")
+
+    for names, label in [(preferred_names, "BEBAS BRAND FONT"), (fallback_names, "FALLBACK BRAND FONT")]:
+        for folder in [FONTS_DIR, ROOT, ROOT / "assets"]:
+            if not folder.exists():
+                continue
+            for p in folder.iterdir():
+                if p.is_file() and p.name.lower() in names and font_is_valid(p):
+                    print(f"{label} OK: {p}")
+                    return p
+
+    try:
+        print("BEBAS BRAND FONT MISSING: downloading BebasNeue-Regular.ttf")
+        return download_font("BebasNeue-Regular.ttf")
+    except Exception as e:
+        print(f"BEBAS DOWNLOAD FAILED: {e}")
+
+    print("BRAND FONT MISSING/BAD: using Lexend fallback for filler text")
     return None
 
 
@@ -348,14 +365,15 @@ def layout_for_single_image(items):
 def build_fonts(row_h, sep_h):
     body_size = max(sc(7), min(sc(10), row_h - sc(6)))
     header_size = sc(10)
-    # reduced filler row text per your request
-    brand_size = max(sc(6), min(sc(8), sep_h - sc(10)))
+
+    # Blue filler/banner strip: Bebas Neue needs to be larger than the old filler font.
+    brand_size = max(sc(9), min(sc(14), sep_h - sc(4)))
     return {
         "header": fnt(header_size, "header"),
         "body": fnt(body_size, "body"),
         "name": fnt(body_size, "body"),
         "brand": fnt(brand_size, "brand"),
-        "brand_small": fnt(max(sc(6), brand_size - sc(1)), "brand"),
+        "brand_small": fnt(max(sc(8), brand_size - sc(1)), "brand"),
     }
 
 
@@ -382,9 +400,9 @@ def draw_bar(draw, y, sep_h, fonts):
     draw.line((X0, y + sep_h - 2, X0 + TABLE_W, y + sep_h - 2), fill=BAR_SHADOW, width=1)
     draw.line((X0, y, X0 + TABLE_W, y), fill=(0, 42, 79, 185), width=1)
     draw.line((X0, y + sep_h - 1, X0 + TABLE_W, y + sep_h - 1), fill=(0, 42, 79, 185), width=1)
-    center_text(draw, (X0 + 7, y, X0 + 258, y + sep_h), BRAND_LEFT, fonts["brand"], WHITE, stroke=0, yoff=-1)
-    center_text(draw, (X0 + 242, y, X0 + TABLE_W - 242, y + sep_h), BRAND_MID, fonts["brand"], WHITE, stroke=0, yoff=-1)
-    center_text(draw, (X0 + TABLE_W - 258, y, X0 + TABLE_W - 7, y + sep_h), BRAND_RIGHT, fonts["brand_small"], WHITE, stroke=0, yoff=-1)
+    center_text(draw, (X0 + sc(7), y, X0 + sc(258), y + sep_h), BRAND_LEFT.upper(), fonts["brand"], WHITE, stroke=0, yoff=-1)
+    center_text(draw, (X0 + sc(242), y, X0 + TABLE_W - sc(242), y + sep_h), BRAND_MID.upper(), fonts["brand"], WHITE, stroke=0, yoff=-1)
+    center_text(draw, (X0 + TABLE_W - sc(258), y, X0 + TABLE_W - sc(7), y + sep_h), BRAND_RIGHT.upper(), fonts["brand_small"], WHITE, stroke=0, yoff=-1)
 
 
 def draw_row(draw, xs, y, row, idx, row_h, fonts):
