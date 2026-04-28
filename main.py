@@ -7,8 +7,8 @@ from google.oauth2.service_account import Credentials
 
 # --- CONFIGURATION ---
 # Replace this with your long ID from the URL
-GSHEET_ID = "YOUR_SPREADSHEET_ID_HERE" 
-TAB_NAME = "Sheet1"
+GSHEET_ID = "1ZMRcWZlmzhc1UbGJEnct5eBkV2IV9NaMWPhcuXT5Zyw" 
+TAB_NAME = "Test"
 BG_FILENAME = "background.png"
 
 def get_data():
