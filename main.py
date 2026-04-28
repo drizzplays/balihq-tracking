@@ -41,12 +41,12 @@ BAR_SHADOW = (0, 45, 78, 255)
 GREEN = (0, 181, 45, 255)
 GREEN_DARK = (0, 83, 31, 255)
 BLACK = (0, 0, 0, 255)
-GRID = (0, 0, 0, 210)
-GRID_SOFT = (0, 0, 0, 105)
+GRID = (0, 0, 0, 185)
+GRID_SOFT = (0, 0, 0, 80)
 WHITE = (255, 255, 255, 255)
 TEXT = (0, 0, 0, 255)
-ROW_LIGHT = (242, 250, 253, 135)
-ROW_DARK = (181, 201, 210, 135)
+ROW_LIGHT = (242, 250, 253, 118)
+ROW_DARK = (181, 201, 210, 118)
 TT_CUP = (245, 224, 19, 255)
 TT_ELITE = (252, 242, 203, 245)
 CZECH = (0, 91, 127, 255)
@@ -62,32 +62,61 @@ SET_RE = re.compile(r"^\d+\s*-\s*\d+\s*-\s*\d+$")
 ROOT = Path(__file__).resolve().parent
 
 
+def _font_candidates(names):
+    folders = [ROOT, ROOT / "fonts", ROOT / "assets", ROOT / "font"]
+    for folder in folders:
+        for name in names:
+            p = folder / name
+            if p.exists():
+                return str(p)
+    return None
+
+
 def font(size, role="body"):
+    # Sheet text uses regular Lexend, not bold.
     if role == "brand":
-        names = ["superchargestraight.ttf", "SuperchargeStraight.ttf"]
+        names = ["superchargestraight.ttf", "SuperchargeStraight.ttf", "supercharge_straight.ttf"]
     elif role == "header":
-        names = ["Lexend-Bold.ttf", "Lexend-SemiBold.ttf", "Lexend-Regular.ttf"]
+        names = ["Lexend-Regular.ttf", "Lexend.ttf", "Lexend-Medium.ttf"]
     else:
-        names = ["Lexend-Bold.ttf", "Lexend-SemiBold.ttf", "Lexend-Regular.ttf"]
+        names = ["Lexend-Regular.ttf", "Lexend.ttf"]
+
+    found = _font_candidates(names)
+    if found:
+        return ImageFont.truetype(found, size)
+
+    print(f"WARNING: Missing font for role={role}. Put {names[0]} beside main.py or in /fonts.")
     fallbacks = [
-        "/usr/share/fonts/truetype/dejavu/DejaVuSansCondensed-Bold.ttf",
-        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
-        "/usr/share/fonts/truetype/liberation2/LiberationSans-Bold.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+        "/usr/share/fonts/truetype/liberation2/LiberationSans-Regular.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSansCondensed.ttf",
     ]
-    for n in names:
-        p = ROOT / n
-        if p.exists():
-            return ImageFont.truetype(str(p), size)
+    if role == "brand":
+        fallbacks = [
+            "/usr/share/fonts/truetype/dejavu/DejaVuSansCondensed-Bold.ttf",
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+        ]
     for p in fallbacks:
         if Path(p).exists():
             return ImageFont.truetype(p, size)
     return ImageFont.load_default()
-
 FONT_HEADER = font(10, "header")
 FONT_BODY = font(9, "body")
 FONT_NAME = font(9, "body")
-FONT_BRAND = font(14, "brand")
-FONT_BRAND_SMALL = font(13, "brand")
+FONT_BRAND = font(11, "brand")
+FONT_BRAND_SMALL = font(10, "brand")
+
+def build_fonts(row_h, sep_h):
+    # One-image mode: shrink text only when the sheet has more rows than the reference can hold.
+    body_size = max(6, min(9, row_h - 4))
+    brand_size = max(7, min(10, sep_h - 8))
+    return {
+        "header": font(10, "header"),
+        "body": font(body_size, "body"),
+        "name": font(body_size, "body"),
+        "brand": font(brand_size, "brand"),
+        "brand_small": font(max(7, brand_size - 1), "brand"),
+    }
 
 
 def get_data():
@@ -269,44 +298,109 @@ def draw_row(draw, xs, y, row, idx):
         center_text(draw, (xs[i]+2,y,xs[i+1]-2,y+ROW_H), str(c).upper() if i == 6 else c, f, fill, yoff=-1)
 
 
-def paginate(items):
-    pages, cur, y = [], [], Y0 + HEADER_H
-    # each page always reserves final brand bar at bottom if needed
+def compact_items(items):
+    out, last_sep = [], False
     for item in items:
-        h = SEP_H if item is None else ROW_H
-        if y + h + SEP_H > BOTTOM_Y and cur:
-            pages.append(cur); cur=[]; y=Y0+HEADER_H
-        if item is None and (not cur or cur[-1] is None):
+        if item is None:
+            if out and not last_sep:
+                out.append(None)
+                last_sep = True
             continue
-        cur.append(item); y += h
-    if cur: pages.append(cur)
-    return pages or [[]]
+        out.append(item)
+        last_sep = False
+    while out and out[-1] is None:
+        out.pop()
+    out.append(None)
+    return out
 
 
-def render_page(items, page_num=1):
+def layout_for_single_image(items):
+    row_count = sum(1 for x in items if x is not None)
+    bar_count = sum(1 for x in items if x is None)
+    usable_h = BOTTOM_Y - (Y0 + HEADER_H)
+    sep_h = SEP_H
+    row_h = ROW_H
+
+    if row_count * row_h + bar_count * sep_h > usable_h:
+        # Keep the Discord post as ONE image. Dense sheets must shrink vertically.
+        sep_h = max(12, min(SEP_H, int((usable_h * 0.15) / max(1, bar_count))))
+        row_h = max(10, int((usable_h - bar_count * sep_h) / max(1, row_count)))
+        if row_count * row_h + bar_count * sep_h > usable_h:
+            sep_h = max(9, int((usable_h - row_count * row_h) / max(1, bar_count)))
+
+    return row_h, sep_h
+
+
+def draw_header2(draw, xs, fonts):
+    gradient(draw, (X0,Y0,X0+TABLE_W,Y0+HEADER_H), HEADER_TOP, HEADER_BOT)
+    draw.line((X0, Y0+1, X0+TABLE_W, Y0+1), fill=(130,190,225,125), width=1)
+    for i,name in enumerate(COL_NAMES):
+        x1,x2 = xs[i], xs[i+1]
+        label = "Set Break..." if name == "Set Break Down" else name
+        if i in (0,6):
+            cx,cy = x1+13, Y0+HEADER_H//2
+            draw.ellipse((cx-4,cy-3,cx+4,cy+3), outline=(230,245,255,220), width=1)
+            draw.ellipse((cx-1,cy-1,cx+1,cy+1), fill=(230,245,255,220))
+        center_text(draw, (x1+5,Y0,x2-16,Y0+HEADER_H), label, fonts["header"], WHITE, yoff=-1)
+        draw.polygon([(x2-13,Y0+8),(x2-5,Y0+8),(x2-9,Y0+15)], fill=(224,240,250,240))
+        draw.line((x2,Y0,x2,Y0+HEADER_H), fill=(0,42,79,255), width=1)
+    draw.line((X0,Y0,X0+TABLE_W,Y0), fill=BLACK, width=2)
+    draw.line((X0,Y0+HEADER_H,X0+TABLE_W,Y0+HEADER_H), fill=BLACK, width=2)
+
+
+def draw_bar2(draw, y, sep_h, fonts):
+    gradient(draw, (X0,y,X0+TABLE_W,y+sep_h), BAR_TOP, BAR_BOT)
+    draw.line((X0,y+1,X0+TABLE_W,y+1), fill=(126,186,226,135), width=1)
+    draw.line((X0,y+sep_h-2,X0+TABLE_W,y+sep_h-2), fill=BAR_SHADOW, width=1)
+    draw.rectangle((X0,y,X0+TABLE_W,y+sep_h), outline=BLACK, width=1)
+    center_text(draw, (X0+7,y,X0+258,y+sep_h), BRAND_LEFT.lower(), fonts["brand"], WHITE, stroke=0, yoff=-1)
+    center_text(draw, (X0+242,y,X0+TABLE_W-242,y+sep_h), BRAND_MID.lower(), fonts["brand"], WHITE, stroke=0, yoff=-1)
+    center_text(draw, (X0+TABLE_W-258,y,X0+TABLE_W-7,y+sep_h), BRAND_RIGHT.lower(), fonts["brand_small"], WHITE, stroke=0, yoff=-1)
+
+
+def draw_row2(draw, xs, y, row, idx, row_h, fonts):
+    draw.rectangle((X0,y,X0+TABLE_W,y+row_h), fill=ROW_LIGHT if idx%2==0 else ROW_DARK)
+    lf, lt = league_style(row[0]); bf, bt = bet_style(row[6])
+    draw.rectangle((xs[0],y,xs[1],y+row_h), fill=lf)
+    draw.rectangle((xs[6],y,xs[7],y+row_h), fill=bf)
+    for j,xx in enumerate(xs):
+        draw.line((xx,y,xx,y+row_h), fill=GRID, width=2 if j in (0,8,9,len(xs)-1) else 1)
+    draw.line((X0,y+row_h,X0+TABLE_W,y+row_h), fill=GRID_SOFT, width=1)
+    for i,c in enumerate(row):
+        f = fonts["name"] if i in (4,5) else fonts["body"]
+        fill = lt if i == 0 else bt if i == 6 else TEXT
+        center_text(draw, (xs[i]+2,y,xs[i+1]-2,y+row_h), str(c).upper() if i == 6 else c, f, fill, yoff=-1)
+
+
+def render_single(items):
+    items = compact_items(items)
+    row_h, sep_h = layout_for_single_image(items)
+    fonts = build_fonts(row_h, sep_h)
+
     img = background(); draw = ImageDraw.Draw(img, "RGBA")
     xs = [X0]
-    for w in COL_WIDTHS: xs.append(xs[-1]+w)
+    for w in COL_WIDTHS:
+        xs.append(xs[-1]+w)
 
-    # target-like green frame, square corners, no big shadow/card effect
     draw.rectangle((FRAME_PAD, FRAME_PAD, CANVAS_W-FRAME_PAD, CANVAS_H-FRAME_PAD), outline=GREEN, width=5)
     draw.rectangle((14, 14, CANVAS_W-14, CANVAS_H-14), outline=GREEN_DARK, width=1)
 
-    draw_header(draw, xs)
+    draw_header2(draw, xs, fonts)
     y = Y0 + HEADER_H
     row_idx = 0
-    last_sep = False
     for item in items:
         if item is None:
-            if not last_sep:
-                draw_bar(draw, y); y += SEP_H; last_sep = True
-            continue
-        draw_row(draw, xs, y, item, row_idx)
-        y += ROW_H; row_idx += 1; last_sep = False
-    draw_bar(draw, y); y += SEP_H
-    draw.rectangle((X0,Y0,X0+TABLE_W,y), outline=BLACK, width=2)
-    out = f"{OUTPUT_PREFIX}.png" if page_num == 1 else f"{OUTPUT_PREFIX}_{page_num}.png"
+            draw_bar2(draw, y, sep_h, fonts)
+            y += sep_h
+        else:
+            draw_row2(draw, xs, y, item, row_idx, row_h, fonts)
+            y += row_h
+            row_idx += 1
+
+    draw.rectangle((X0,Y0,X0+TABLE_W,min(y,BOTTOM_Y)), outline=BLACK, width=2)
+    out = f"{OUTPUT_PREFIX}.png"
     img.convert("RGB").save(out, quality=98, optimize=True)
+    print(f"SUCCESS: Rendered ONE image: rows={row_idx}, row_h={row_h}, sep_h={sep_h}, file={out}")
     return out, row_idx
 
 
@@ -314,14 +408,9 @@ def create_graphics(rows):
     print("--- STEP 2: CREATING GRAPHIC ---")
     try:
         items = normalize(rows)
-        pages = paginate(items)
-        files = []
-        total_rows = 0
-        for i,page in enumerate(pages, 1):
-            out, count = render_page(page, i)
-            files.append(out); total_rows += count
-        print(f"SUCCESS: Rendered {total_rows} rows across {len(files)} image(s): {files}")
-        return files
+        out, total_rows = render_single(items)
+        print(f"SUCCESS: Rendered {total_rows} rows into ONE image: {out}")
+        return [out]
     except Exception as e:
         print(f"ERROR IN GRAPHIC CREATION: {e}")
         return []
