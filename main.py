@@ -63,11 +63,7 @@ SET_RE = re.compile(r"^\d+\s*-\s*\d+\s*-\s*\d+$")
 # =========================
 # FONT FIX: download valid Lexend every run if local file is bad/missing
 # =========================
-LEXEND_URLS = {
-    "Lexend-Regular.ttf": "https://raw.githubusercontent.com/google/fonts/main/ofl/lexend/static/Lexend-Regular.ttf",
-    "Lexend-Bold.ttf": "https://raw.githubusercontent.com/google/fonts/main/ofl/lexend/static/Lexend-Bold.ttf",
-}
-
+LEXEND_URL = "https://raw.githubusercontent.com/google/fonts/main/ofl/lexend/static/Lexend-Regular.ttf"
 
 def font_is_valid(path: Path) -> bool:
     try:
