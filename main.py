@@ -44,8 +44,8 @@ GRID_SOFT = (0, 0, 0, 102)
 OUTLINE_GREEN = (0, 177, 44, 255)
 TEXT_DARK = (0, 0, 0, 255)
 TEXT_WHITE = (255, 255, 255, 255)
-ROW_LIGHT = (237, 247, 250, 132)
-ROW_DARK = (196, 212, 221, 132)
+ROW_LIGHT = (240, 250, 252, 108)
+ROW_DARK = (190, 207, 216, 108)
 LEAGUE_TT_CUP = (244, 223, 27, 255)
 LEAGUE_TT_ELITE = (252, 241, 202, 244)
 LEAGUE_CZECH = (0, 92, 128, 255)
@@ -106,11 +106,11 @@ def _font(size, kind="sheet"):
     return ImageFont.load_default()
 
 
-FONT_HEADER = _font(10, "sheet")
-FONT_CELL = _font(8, "sheet")
-FONT_NAME = _font(8, "sheet")
-FONT_BRAND = _font(14, "brand")
-FONT_BRAND_SMALL = _font(13, "brand")
+FONT_HEADER = _font(11, "sheet")
+FONT_CELL = _font(9, "sheet")
+FONT_NAME = _font(9, "sheet")
+FONT_BRAND = _font(13, "brand")
+FONT_BRAND_SMALL = _font(12, "brand")
 
 
 def _text_size(draw, text, font):
@@ -132,7 +132,7 @@ def _fit_text(draw, text, font, max_w):
 
 def _center_text(draw, box, text, font, fill, stroke=0, y_offset=0):
     x1, y1, x2, y2 = box
-    text = _fit_text(draw, text, font, max(1, x2 - x1 - 6))
+    text = _fit_text(draw, text, font, max(1, x2 - x1 - 4))
     tw, th = _text_size(draw, text, font)
     draw.text(
         (x1 + (x2 - x1 - tw) / 2, y1 + (y2 - y1 - th) / 2 - 1 + y_offset),
@@ -337,12 +337,19 @@ def _draw_row(draw, x0, xs, y, row, idx, row_h):
 def _fit_vertical(rows):
     sep_count = sum(1 for r in rows if r is None) + 1
     data_count = sum(1 for r in rows if r is not None)
-    # Match the reference density. Never crush text or drop rows; grow canvas if the sheet is longer.
+    available = CANVAS_H - TOP_Y - HEADER_H - BOTTOM_PAD
     row_h = ROW_H_DEFAULT
     sep_h = SEP_H_DEFAULT
-    needed = sep_count * sep_h + data_count * row_h
-    canvas_h = max(CANVAS_H, TOP_Y + HEADER_H + needed + BOTTOM_PAD)
-    return row_h, sep_h, canvas_h
+    needed = data_count * row_h + sep_count * sep_h
+    if needed > available and data_count + sep_count > 0:
+        scale = available / needed
+        row_h = max(14, int(row_h * scale))
+        sep_h = max(15, int(sep_h * scale))
+        while data_count * row_h + sep_count * sep_h > available and row_h > 13:
+            row_h -= 1
+        while data_count * row_h + sep_count * sep_h > available and sep_h > 13:
+            sep_h -= 1
+    return row_h, sep_h, CANVAS_H
 
 def create_graphic(rows):
     print("--- STEP 2: CREATING GRAPHIC ---")
@@ -358,17 +365,10 @@ def create_graphic(rows):
         for w in COL_WIDTHS:
             xs.append(xs[-1] + w)
 
-        # Pro card shadow + neon frame.
-        shadow = Image.new("RGBA", img.size, (0, 0, 0, 0))
-        sd = ImageDraw.Draw(shadow, "RGBA")
-        sd.rounded_rectangle((10, 10, CANVAS_W - 7, table_bottom + 3), radius=6, fill=(0, 0, 0, 110))
-        shadow = shadow.filter(ImageFilter.GaussianBlur(2.2))
-        img.alpha_composite(shadow)
-        draw = ImageDraw.Draw(img, "RGBA")
-
-        draw.rounded_rectangle((8, 8, CANVAS_W - 8, table_bottom + 6), radius=5, outline=OUTLINE_GREEN, width=5)
-        draw.rounded_rectangle((12, 12, CANVAS_W - 12, table_bottom + 2), radius=3, outline=(0, 78, 21, 210), width=1)
-        draw.rectangle((x0, TOP_Y, x0 + TABLE_W, table_bottom), fill=(225, 245, 248, 12))
+        # Crisp rectangular frame like the reference sheet. No rounded shadow-card.
+        draw.rectangle((9, 9, CANVAS_W - 9, table_bottom + 6), outline=OUTLINE_GREEN, width=5)
+        draw.rectangle((14, 14, CANVAS_W - 14, table_bottom + 1), outline=(0, 75, 25, 230), width=1)
+        draw.rectangle((x0, TOP_Y, x0 + TABLE_W, table_bottom), fill=(225, 245, 248, 4))
 
         y = TOP_Y
         _draw_header(draw, x0, xs, y)
