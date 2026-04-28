@@ -8,8 +8,8 @@ from google.oauth2.service_account import Credentials
 
 # --- CONFIGURATION ---
 # Change these to match your setup
-GSHEET_NAME = "Your Spreadsheet Name"
-TAB_NAME = "Sheet1"
+GSHEET_NAME = "BaliHQBetsBOT"
+TAB_NAME = "Test"
 BG_FILENAME = "background.png"
 
 def get_data():
@@ -22,7 +22,7 @@ def get_data():
     creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
     client = gspread.authorize(creds)
     
-    sheet = client.open(GSHEET_NAME).worksheet(TAB_NAME)
+    sheet = client.open_by_key("1ZMRcWZlmzhc1UbGJEnct5eBkV2IV9NaMWPhcuXT5Zyw").worksheet(Test)
     return sheet.get_all_values()
 
 def create_graphic(rows):
