@@ -23,7 +23,7 @@ def sc(v: int) -> int:
     return int(round(v * RENDER_SCALE))
 
 # Dynamic canvas by default so the background only wraps the chart.
-# Banner height is in final output pixels so it stays exactly the size you want.
+# Banner height uses the same render scale as the chart, so BANNER_HEIGHT=335 displays like 335px in the final preview.
 # Set USE_FIXED_CANVAS=1 if you ever want the old fixed-size canvas back.
 USE_FIXED_CANVAS = os.environ.get("USE_FIXED_CANVAS", "").strip().lower() in {"1", "true", "yes"}
 FIXED_CANVAS_W = sc(int(os.environ.get("CANVAS_W", "1038"))) if USE_FIXED_CANVAS else None
@@ -35,8 +35,8 @@ RIGHT_PAD = sc(int(os.environ.get("RIGHT_PAD", os.environ.get("TABLE_X", "15")))
 BOTTOM_PAD = sc(int(os.environ.get("BOTTOM_PAD", "15")))
 
 BANNER_ENABLED = os.environ.get("BANNER_ENABLED", "1").strip().lower() in {"1", "true", "yes"}
-BANNER_HEIGHT = int(os.environ.get("BANNER_HEIGHT", "335"))
-BANNER_GAP = int(os.environ.get("BANNER_GAP", "0"))
+BANNER_HEIGHT = sc(int(os.environ.get("BANNER_HEIGHT", "335")))
+BANNER_GAP = sc(int(os.environ.get("BANNER_GAP", "0")))
 BANNER_IMAGE_FILENAME = os.environ.get("BANNER_IMAGE_FILENAME", "banner.png").strip()
 BANNER_FIT_MODE = os.environ.get("BANNER_FIT_MODE", "cover").strip().lower()
 
