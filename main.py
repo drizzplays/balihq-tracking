@@ -22,8 +22,8 @@ RENDER_SCALE = int(os.environ.get("RENDER_SCALE", "2"))
 def sc(v: int) -> int:
     return int(round(v * RENDER_SCALE))
 
-# Dynamic canvas by default so the background only wraps the table.
-# If you ever want the old fixed-size behavior back, set USE_FIXED_CANVAS=1.
+# Dynamic canvas by default so the background only wraps the chart.
+# Set USE_FIXED_CANVAS=1 if you ever want the old fixed-size canvas back.
 USE_FIXED_CANVAS = os.environ.get("USE_FIXED_CANVAS", "").strip().lower() in {"1", "true", "yes"}
 FIXED_CANVAS_W = sc(int(os.environ.get("CANVAS_W", "1038"))) if USE_FIXED_CANVAS else None
 FIXED_CANVAS_H = sc(int(os.environ.get("CANVAS_H", "757"))) if USE_FIXED_CANVAS else None
@@ -34,11 +34,10 @@ RIGHT_PAD = sc(int(os.environ.get("RIGHT_PAD", os.environ.get("TABLE_X", "15")))
 BOTTOM_PAD = sc(int(os.environ.get("BOTTOM_PAD", "15")))
 
 BANNER_ENABLED = os.environ.get("BANNER_ENABLED", "1").strip().lower() in {"1", "true", "yes"}
-BANNER_HEIGHT = sc(int(os.environ.get("BANNER_HEIGHT", "46")))
+BANNER_HEIGHT = sc(int(os.environ.get("BANNER_HEIGHT", "90")))
 BANNER_GAP = sc(int(os.environ.get("BANNER_GAP", "8")))
-BANNER_TITLE = os.environ.get("BANNER_TITLE", "BALIHQBETS").strip()
-BANNER_SUBTITLE = os.environ.get("BANNER_SUBTITLE", "").strip()
-LOGO_FILENAME = os.environ.get("LOGO_FILENAME", "banner.png")
+BANNER_IMAGE_FILENAME = os.environ.get("BANNER_IMAGE_FILENAME", "banner.png").strip()
+BANNER_FIT_MODE = os.environ.get("BANNER_FIT_MODE", "cover").strip().lower()
 
 X0 = LEFT_PAD
 Y0 = TOP_PAD + ((BANNER_HEIGHT + BANNER_GAP) if BANNER_ENABLED else 0)
@@ -327,28 +326,6 @@ def gradient(draw, xy, top, bot):
         c = tuple(int(top[k] * (1 - t) + bot[k] * t) for k in range(4))
         draw.line((x1, y1 + i, x2, y1 + i), fill=c)
 
-def contain_size(src_w, src_h, max_w, max_h):
-    if src_w <= 0 or src_h <= 0 or max_w <= 0 or max_h <= 0:
-        return 0, 0
-    scale = min(max_w / src_w, max_h / src_h)
-    return max(1, int(round(src_w * scale))), max(1, int(round(src_h * scale)))
-
-def load_logo():
-    candidates = [
-        ROOT / LOGO_FILENAME,
-        ROOT / "banner.png",
-        ROOT / "assets" / LOGO_FILENAME,
-        ROOT / "assets" / "banner.png",
-    ]
-    for p in candidates:
-        if not p.exists():
-            continue
-        try:
-            return Image.open(p).convert("RGBA")
-        except Exception:
-            pass
-    return None
-
 def background(canvas_w, canvas_h):
     p = ROOT / BG_FILENAME
 
@@ -376,6 +353,60 @@ def background(canvas_w, canvas_h):
 
     return bg.convert("RGBA")
 
+def load_banner_image():
+    if not BANNER_ENABLED or not BANNER_IMAGE_FILENAME:
+        return None
+
+    candidates = [
+        ROOT / BANNER_IMAGE_FILENAME,
+        ROOT / "banner.png",
+        ROOT / "assets" / BANNER_IMAGE_FILENAME,
+        ROOT / "assets" / "banner.png",
+    ]
+
+    for path in candidates:
+        if not path.exists():
+            continue
+        try:
+            return Image.open(path).convert("RGBA")
+        except Exception:
+            pass
+
+    return None
+
+def paste_banner_image_cover(base_img, banner_img, box):
+    bx1, by1, bx2, by2 = box
+    target_w = max(1, bx2 - bx1)
+    target_h = max(1, by2 - by1)
+    src_w, src_h = banner_img.size
+
+    scale = max(target_w / src_w, target_h / src_h)
+    new_w = max(1, int(round(src_w * scale)))
+    new_h = max(1, int(round(src_h * scale)))
+
+    banner_img = banner_img.resize((new_w, new_h), Image.Resampling.LANCZOS)
+
+    crop_left = max(0, (new_w - target_w) // 2)
+    crop_top = max(0, (new_h - target_h) // 2)
+    banner_img = banner_img.crop((crop_left, crop_top, crop_left + target_w, crop_top + target_h))
+
+    base_img.alpha_composite(banner_img, (bx1, by1))
+
+def paste_banner_image_contain(base_img, banner_img, box):
+    bx1, by1, bx2, by2 = box
+    target_w = max(1, bx2 - bx1)
+    target_h = max(1, by2 - by1)
+    src_w, src_h = banner_img.size
+
+    scale = min(target_w / src_w, target_h / src_h)
+    new_w = max(1, int(round(src_w * scale)))
+    new_h = max(1, int(round(src_h * scale)))
+
+    banner_img = banner_img.resize((new_w, new_h), Image.Resampling.LANCZOS)
+    px = bx1 + (target_w - new_w) // 2
+    py = by1 + (target_h - new_h) // 2
+    base_img.alpha_composite(banner_img, (px, py))
+
 def league_style(v):
     u = str(v).upper()
 
@@ -400,7 +431,7 @@ def layout_for_single_image(items):
     target_row_h = sc(int(os.environ.get("ROW_H", "20")))
     target_sep_h = sc(int(os.environ.get("SEP_H", "20")))
 
-    # Default behavior: keep the graphic crisp and let canvas height grow with the content.
+    # Dynamic mode: do not shrink rows to force a fixed canvas.
     if not FIXED_CANVAS_H:
         return target_row_h, target_sep_h
 
@@ -424,8 +455,6 @@ def build_fonts(row_h, sep_h):
     body_size = max(sc(7), min(sc(10), row_h - sc(6)))
     header_size = sc(10)
     brand_size = max(sc(8), min(sc(12), sep_h - sc(6)))
-    banner_title_size = max(sc(14), min(sc(20), BANNER_HEIGHT - sc(14)))
-    banner_subtitle_size = max(sc(7), min(sc(10), BANNER_HEIGHT // 3))
 
     # Match the manual graphic: all body cells use the same bold/clean treatment.
     return {
@@ -433,44 +462,30 @@ def build_fonts(row_h, sep_h):
         "body": fnt(body_size, "header"),
         "name": fnt(body_size, "header"),
         "brand": fnt(brand_size, "brand"),
-        "banner_title": fnt(banner_title_size, "header"),
-        "banner_subtitle": fnt(banner_subtitle_size, "body"),
     }
 
-def draw_banner(draw, img, fonts):
+def draw_banner(draw, img):
     if not BANNER_ENABLED:
         return
 
     bx1, by1 = X0, TOP_PAD
     bx2, by2 = X0 + TABLE_W, TOP_PAD + BANNER_HEIGHT
 
+    # Base strip is only a fallback/behind transparent areas in banner.png.
     gradient(draw, (bx1, by1, bx2, by2), (37, 118, 184, 255), (18, 79, 142, 255))
+
+    banner_img = load_banner_image()
+    if banner_img is not None:
+        if BANNER_FIT_MODE == "contain":
+            paste_banner_image_contain(img, banner_img, (bx1, by1, bx2, by2))
+        else:
+            # Default: make banner.png the full width of the chart.
+            paste_banner_image_cover(img, banner_img, (bx1, by1, bx2, by2))
+
     draw.line((bx1, by1, bx2, by1), fill=(120, 190, 232, 150), width=1)
     draw.line((bx1, by2 - 1, bx2, by2 - 1), fill=BAR_SHADOW, width=1)
     draw.line((bx1, by1, bx1, by2), fill=(0, 42, 79, 185), width=1)
     draw.line((bx2, by1, bx2, by2), fill=(0, 42, 79, 185), width=1)
-
-    logo = load_logo()
-    if logo is not None:
-        pad_x = sc(14)
-        pad_y = sc(5)
-        max_w = max(1, (bx2 - bx1) - pad_x * 2)
-        max_h = max(1, (by2 - by1) - pad_y * 2)
-        nw, nh = contain_size(*logo.size, max_w, max_h)
-        logo = logo.resize((nw, nh), Image.Resampling.LANCZOS)
-        px = bx1 + ((bx2 - bx1) - nw) // 2
-        py = by1 + ((by2 - by1) - nh) // 2
-        img.alpha_composite(logo, (px, py))
-        return
-
-    title = BANNER_TITLE or BRAND_MID.upper()
-    subtitle = BANNER_SUBTITLE
-
-    if subtitle:
-        center_text_true(draw, (bx1 + sc(10), by1 + sc(3), bx2 - sc(10), by1 + int(BANNER_HEIGHT * 0.66)), title, fonts["banner_title"], WHITE, yoff=0)
-        center_text_true(draw, (bx1 + sc(10), by1 + int(BANNER_HEIGHT * 0.56), bx2 - sc(10), by2 - sc(3)), subtitle, fonts["banner_subtitle"], (235, 244, 250, 245), yoff=0)
-    else:
-        center_text_true(draw, (bx1 + sc(10), by1, bx2 - sc(10), by2), title, fonts["banner_title"], WHITE, yoff=0)
 
 def draw_header(draw, xs, fonts):
     gradient(draw, (X0, Y0, X0 + TABLE_W, Y0 + HEADER_H), HEADER_TOP, HEADER_BOT)
@@ -548,7 +563,6 @@ def draw_row(draw, xs, y, row, idx, row_h, fonts):
         fill = lt if i == 0 else bt if i == 6 else TEXT
         value = str(c).upper() if i == 6 else c
         center_text_true(draw, (xs[i] + 2, y, xs[i + 1] - 2, y + row_h), value, font, fill, yoff=0)
-
 def content_dimensions(items, row_h, sep_h):
     content_h = HEADER_H + sum(sep_h if item is None else row_h for item in items)
     canvas_w = FIXED_CANVAS_W or (LEFT_PAD + TABLE_W + RIGHT_PAD)
@@ -567,7 +581,7 @@ def render_single(items):
     for w in COL_WIDTHS:
         xs.append(xs[-1] + w)
 
-    draw_banner(draw, img, fonts)
+    draw_banner(draw, img)
     draw_header(draw, xs, fonts)
 
     y = Y0 + HEADER_H
