@@ -17,20 +17,20 @@ OUTPUT_PREFIX = os.environ.get("OUTPUT_PREFIX", "output")
 ROOT = Path(__file__).resolve().parent
 FONTS_DIR = ROOT / "fonts"
 
-RENDER_SCALE = int(os.environ.get("RENDER_SCALE", "1"))
+RENDER_SCALE = int(os.environ.get("RENDER_SCALE", "2"))
 
 def sc(v: int) -> int:
     return int(round(v * RENDER_SCALE))
 
 CANVAS_W = sc(int(os.environ.get("CANVAS_W", "1038")))
 CANVAS_H = sc(int(os.environ.get("CANVAS_H", "757")))
-X0 = sc(int(os.environ.get("TABLE_X", "18")))
-Y0 = sc(int(os.environ.get("TABLE_Y", "18")))
-HEADER_H = sc(int(os.environ.get("HEADER_H", "18")))
-BOTTOM_Y = sc(int(os.environ.get("TABLE_BOTTOM_Y", "725")))
+X0 = sc(int(os.environ.get("TABLE_X", "15")))
+Y0 = sc(int(os.environ.get("TABLE_Y", "17")))
+HEADER_H = sc(int(os.environ.get("HEADER_H", "21")))
+BOTTOM_Y = CANVAS_H - sc(15)
 
 COL_NAMES = ["League", "PST", "MTN", "EST", "Player 1", "Player 2", "BET", "Unit", "History", "Split %", "Set Break Down"]
-COL_WIDTHS = [sc(v) for v in [104, 60, 61, 60, 135, 137, 95, 59, 121, 71, 96]]
+COL_WIDTHS = [sc(v) for v in [109, 61, 61, 61, 136, 137, 76, 70, 124, 69, 104]]
 TABLE_W = sum(COL_WIDTHS)
 
 BRAND_TEXT = os.environ.get("BRAND_TEXT", "official property of balihqbets").lower()
@@ -41,26 +41,29 @@ BRAND_RIGHT = os.environ.get("BRAND_RIGHT", BRAND_TEXT).lower()
 # =========================
 # COLORS
 # =========================
-HEADER_TOP = (72, 124, 177, 255)
-HEADER_BOT = (30, 100, 164, 255)
-BAR_TOP = (72, 125, 179, 255)
-BAR_BOT = (30, 100, 164, 255)
+HEADER_TOP = (55, 139, 201, 255)
+HEADER_BOT = (30, 101, 167, 255)
+BAR_TOP = (55, 135, 198, 255)
+BAR_BOT = (31, 100, 164, 255)
 BAR_SHADOW = (0, 45, 78, 255)
-GREEN = (12, 126, 0, 255)
-GRID = (0, 0, 0, 180)
-GRID_SOFT = (0, 0, 0, 180)
+GREEN = (0, 181, 45, 255)
+GRID = (0, 0, 0, 92)
+# Stronger side-to-side row lines so every cell reads as a full square,
+# matching the manual sheet instead of only showing vertical dividers.
+GRID_H = (0, 0, 0, 115)
+GRID_SOFT = (0, 0, 0, 72)
 WHITE = (255, 255, 255, 255)
 TEXT = (0, 0, 0, 255)
 
 # Uniform row color — zebra striping removed
-ROW_FILL = (246, 248, 249, 255)
+ROW_FILL = (242, 250, 253, 235)
 
-TT_CUP = (254, 225, 51, 255)
-TT_ELITE = (252, 242, 203, 255)
-CZECH = (6, 75, 115, 255)
-BET_UNDER = (6, 75, 115, 255)
-BET_OVER = (248, 239, 216, 255)
-BET_SPLIT = (230, 230, 230, 255)
+TT_CUP = (245, 224, 19, 255)
+TT_ELITE = (252, 242, 203, 242)
+CZECH = (0, 91, 127, 255)
+BET_UNDER = (0, 91, 132, 255)
+BET_OVER = (248, 239, 216, 242)
+BET_SPLIT = (230, 230, 230, 242)
 
 TIME_RE = re.compile(r"^\d{1,2}:\d{2}\s*(AM|PM)$", re.I)
 HIST_RE = re.compile(r"^\d+\s*/\s*\d+$")
@@ -367,15 +370,21 @@ def layout_for_single_image(items):
     if row_count * target_row_h + bar_count * target_sep_h <= usable_h:
         return target_row_h, target_sep_h
 
-    sep_h = sc(20)
+    sep_h = sc(17)
     row_h = max(sc(10), int((usable_h - bar_count * sep_h) / max(1, row_count)))
+
+    if row_h < sc(13):
+        sep_h = sc(14)
+        row_h = max(sc(9), int((usable_h - bar_count * sep_h) / max(1, row_count)))
+
     return row_h, sep_h
 
 def build_fonts(row_h, sep_h):
-    body_size = max(sc(8), min(sc(9), row_h - sc(9)))
+    body_size = max(sc(7), min(sc(10), row_h - sc(6)))
     header_size = sc(10)
-    brand_size = max(sc(9), min(sc(13), sep_h - sc(5)))
+    brand_size = max(sc(8), min(sc(12), sep_h - sc(6)))
 
+    # Match the manual graphic: all body cells use the same bold/clean treatment.
     return {
         "header": fnt(header_size, "header"),
         "body": fnt(body_size, "header"),
@@ -396,7 +405,7 @@ def draw_header(draw, xs, fonts):
             draw.ellipse((cx - 4, cy - 3, cx + 4, cy + 3), outline=(230, 245, 255, 220), width=1)
             draw.ellipse((cx - 1, cy - 1, cx + 1, cy + 1), fill=(230, 245, 255, 220))
 
-        center_text_true(draw, (x1 + 5, Y0, x2 - 14, Y0 + HEADER_H), label, fonts["header"], WHITE, yoff=0)
+        center_text_true(draw, (x1 + 5, Y0, x2 - 16, Y0 + HEADER_H), label, fonts["header"], WHITE, yoff=-1)
         draw.polygon([(x2 - 13, Y0 + 8), (x2 - 5, Y0 + 8), (x2 - 9, Y0 + 15)], fill=(224, 240, 250, 240))
         draw.line((x2, Y0, x2, Y0 + HEADER_H), fill=(0, 42, 79, 230), width=1)
 
@@ -414,7 +423,7 @@ def draw_bar(draw, y, sep_h, fonts):
     center_box = (X0 + sum(COL_WIDTHS[:4]), y, X0 + sum(COL_WIDTHS[:8]), y + sep_h)
     right_box = (X0 + sum(COL_WIDTHS[:8]), y, X0 + TABLE_W, y + sep_h)
 
-    brand_yoff = sc(0)
+    brand_yoff = sc(1)
 
     for box, label in (
         (left_box, BRAND_LEFT.upper()),
@@ -442,26 +451,23 @@ def draw_row(draw, xs, y, row, idx, row_h, fonts):
     draw.rectangle((xs[0], y, xs[1], y + row_h), fill=lf)
     draw.rectangle((xs[6], y, xs[7], y + row_h), fill=bf)
 
+    # Full spreadsheet grid: vertical dividers + side-to-side row dividers.
+    # This makes each cell read as an actual square/rectangle like the manual sheet.
     for j, xx in enumerate(xs):
         width = 2 if j in (0, 8, 9, len(xs) - 1) else 1
         draw.line((xx, y, xx, y + row_h), fill=GRID, width=width)
 
-    draw.line((X0, y + row_h, X0 + TABLE_W, y + row_h), fill=GRID_SOFT, width=1)
+    # Top and bottom horizontal lines across the full table. Drawing both prevents
+    # the row separators from disappearing when adjacent row fills overlap.
+    draw.line((X0, y, X0 + TABLE_W, y), fill=GRID_H, width=1)
+    draw.line((X0, y + row_h, X0 + TABLE_W, y + row_h), fill=GRID_H, width=1)
 
     for i, c in enumerate(row):
+        # No stats-only styling: every table cell gets the same bold centered treatment.
         font = fonts["body"]
         fill = lt if i == 0 else bt if i == 6 else TEXT
         value = str(c).upper() if i == 6 else c
-        pad_r = sc(12) if i in (0, 6, 7) else sc(2)
-        center_text_true(draw, (xs[i] + sc(2), y, xs[i + 1] - pad_r, y + row_h), value, font, fill, yoff=0)
-
-        # Google-Sheets style dropdown markers in selectable cells.
-        if i in (0, 6, 7):
-            tri_fill = (130, 96, 0, 210) if i != 6 or "UNDER" not in str(c).upper() else (220, 240, 250, 230)
-            tx = xs[i + 1] - sc(8)
-            ty = y + row_h // 2 + sc(1)
-            draw.polygon([(tx - sc(3), ty - sc(2)), (tx + sc(3), ty - sc(2)), (tx, ty + sc(2))], fill=tri_fill)
-
+        center_text_true(draw, (xs[i] + 2, y, xs[i + 1] - 2, y + row_h), value, font, fill, yoff=0)
 def render_single(items):
     row_h, sep_h = layout_for_single_image(items)
     fonts = build_fonts(row_h, sep_h)
@@ -487,10 +493,11 @@ def render_single(items):
             y += row_h
             row_idx += 1
 
-    draw.rounded_rectangle((sc(10), sc(12), sc(1026), sc(744)), radius=sc(4), outline=GREEN, width=sc(5))
+    draw.rectangle((X0, Y0, X0 + TABLE_W, min(y, BOTTOM_Y)), outline=GREEN, width=sc(3))
 
     out = f"{OUTPUT_PREFIX}.png"
 
+    # Keep high-res output. Do NOT downscale before Discord.
     img.convert("RGB").save(out, quality=98, optimize=True)
 
     print(f"SUCCESS: Rendered ONE image: rows={row_idx}, row_h={row_h}, sep_h={sep_h}, size={CANVAS_W}x{CANVAS_H}, file={out}")
