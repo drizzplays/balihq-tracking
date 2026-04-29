@@ -30,7 +30,7 @@ HEADER_H = sc(int(os.environ.get("HEADER_H", "21")))
 BOTTOM_Y = CANVAS_H - sc(15)
 
 COL_NAMES = ["League", "PST", "MTN", "EST", "Player 1", "Player 2", "BET", "Unit", "History", "Split %", "Set Break Down"]
-COL_WIDTHS = [sc(v) for v in [109, 61, 61, 61, 137, 138, 77, 76, 124, 77, 87]]
+COL_WIDTHS = [sc(v) for v in [109, 61, 61, 61, 136, 137, 76, 70, 124, 69, 104]]
 TABLE_W = sum(COL_WIDTHS)
 
 BRAND_TEXT = os.environ.get("BRAND_TEXT", "official property of balihqbets").lower()
@@ -381,10 +381,11 @@ def build_fonts(row_h, sep_h):
     header_size = sc(10)
     brand_size = max(sc(8), min(sc(12), sep_h - sc(6)))
 
+    # Match the manual graphic: all body cells use the same bold/clean treatment.
     return {
         "header": fnt(header_size, "header"),
-        "body": fnt(body_size, "body"),
-        "name": fnt(body_size, "body"),
+        "body": fnt(body_size, "header"),
+        "name": fnt(body_size, "header"),
         "brand": fnt(brand_size, "brand"),
     }
 
@@ -394,14 +395,14 @@ def draw_header(draw, xs, fonts):
 
     for i, name in enumerate(COL_NAMES):
         x1, x2 = xs[i], xs[i + 1]
-        label = "Set Break..." if name == "Set Break Down" else name
+        label = name
 
         if i in (0, 6):
             cx, cy = x1 + 13, Y0 + HEADER_H // 2
             draw.ellipse((cx - 4, cy - 3, cx + 4, cy + 3), outline=(230, 245, 255, 220), width=1)
             draw.ellipse((cx - 1, cy - 1, cx + 1, cy + 1), fill=(230, 245, 255, 220))
 
-        center_text(draw, (x1 + 5, Y0, x2 - 16, Y0 + HEADER_H), label, fonts["header"], WHITE, yoff=-1)
+        center_text_true(draw, (x1 + 5, Y0, x2 - 16, Y0 + HEADER_H), label, fonts["header"], WHITE, yoff=-1)
         draw.polygon([(x2 - 13, Y0 + 8), (x2 - 5, Y0 + 8), (x2 - 9, Y0 + 15)], fill=(224, 240, 250, 240))
         draw.line((x2, Y0, x2, Y0 + HEADER_H), fill=(0, 42, 79, 230), width=1)
 
@@ -454,10 +455,11 @@ def draw_row(draw, xs, y, row, idx, row_h, fonts):
     draw.line((X0, y + row_h, X0 + TABLE_W, y + row_h), fill=GRID_SOFT, width=1)
 
     for i, c in enumerate(row):
-        font = fonts["name"] if i in (4, 5) else fonts["body"]
+        # No stats-only styling: every table cell gets the same bold centered treatment.
+        font = fonts["body"]
         fill = lt if i == 0 else bt if i == 6 else TEXT
         value = str(c).upper() if i == 6 else c
-        center_text(draw, (xs[i] + 2, y, xs[i + 1] - 2, y + row_h), value, font, fill, yoff=-1)
+        center_text_true(draw, (xs[i] + 2, y, xs[i + 1] - 2, y + row_h), value, font, fill, yoff=0)
 
 def render_single(items):
     row_h, sep_h = layout_for_single_image(items)
