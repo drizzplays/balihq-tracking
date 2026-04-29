@@ -22,12 +22,20 @@ RENDER_SCALE = int(os.environ.get("RENDER_SCALE", "2"))
 def sc(v: int) -> int:
     return int(round(v * RENDER_SCALE))
 
-CANVAS_W = sc(int(os.environ.get("CANVAS_W", "1038")))
-CANVAS_H = sc(int(os.environ.get("CANVAS_H", "757")))
-X0 = sc(int(os.environ.get("TABLE_X", "15")))
-Y0 = sc(int(os.environ.get("TABLE_Y", "17")))
+# Dynamic canvas by default so the background only wraps the table.
+# If you ever want the old fixed-size behavior back, set USE_FIXED_CANVAS=1.
+USE_FIXED_CANVAS = os.environ.get("USE_FIXED_CANVAS", "").strip().lower() in {"1", "true", "yes"}
+FIXED_CANVAS_W = sc(int(os.environ.get("CANVAS_W", "1038"))) if USE_FIXED_CANVAS else None
+FIXED_CANVAS_H = sc(int(os.environ.get("CANVAS_H", "757"))) if USE_FIXED_CANVAS else None
+
+LEFT_PAD = sc(int(os.environ.get("TABLE_X", "15")))
+TOP_PAD = sc(int(os.environ.get("TABLE_Y", "17")))
+RIGHT_PAD = sc(int(os.environ.get("RIGHT_PAD", os.environ.get("TABLE_X", "15"))))
+BOTTOM_PAD = sc(int(os.environ.get("BOTTOM_PAD", "15")))
+
+X0 = LEFT_PAD
+Y0 = TOP_PAD
 HEADER_H = sc(int(os.environ.get("HEADER_H", "21")))
-BOTTOM_Y = CANVAS_H - sc(15)
 
 COL_NAMES = ["League", "PST", "MTN", "EST", "Player 1", "Player 2", "BET", "Unit", "History", "Split %", "Set Break Down"]
 COL_WIDTHS = [sc(v) for v in [109, 61, 61, 61, 136, 137, 76, 70, 124, 69, 104]]
@@ -312,7 +320,7 @@ def gradient(draw, xy, top, bot):
         c = tuple(int(top[k] * (1 - t) + bot[k] * t) for k in range(4))
         draw.line((x1, y1 + i, x2, y1 + i), fill=c)
 
-def background():
+def background(canvas_w, canvas_h):
     p = ROOT / BG_FILENAME
 
     if not p.exists():
@@ -321,7 +329,7 @@ def background():
 
     bg = Image.open(p).convert("RGB")
     bw, bh = bg.size
-    target = CANVAS_W / CANVAS_H
+    target = canvas_w / canvas_h
 
     if bw / bh > target:
         nw = int(bh * target)
@@ -332,7 +340,7 @@ def background():
         top = max(0, (bh - nh) // 2)
         bg = bg.crop((0, top, bw, top + nh))
 
-    bg = bg.resize((CANVAS_W, CANVAS_H), Image.Resampling.LANCZOS)
+    bg = bg.resize((canvas_w, canvas_h), Image.Resampling.LANCZOS)
     bg = ImageEnhance.Contrast(bg).enhance(1.12)
     bg = ImageEnhance.Sharpness(bg).enhance(1.15)
     bg = ImageEnhance.Color(bg).enhance(1.08)
@@ -360,12 +368,16 @@ def bet_style(v):
     return BET_OVER, TEXT
 
 def layout_for_single_image(items):
+    target_row_h = sc(int(os.environ.get("ROW_H", "20")))
+    target_sep_h = sc(int(os.environ.get("SEP_H", "20")))
+
+    # Default behavior: keep the graphic crisp and let canvas height grow with the content.
+    if not FIXED_CANVAS_H:
+        return target_row_h, target_sep_h
+
     row_count = sum(1 for x in items if x is not None)
     bar_count = sum(1 for x in items if x is None)
-    usable_h = BOTTOM_Y - (Y0 + HEADER_H)
-
-    target_row_h = sc(20)
-    target_sep_h = sc(20)
+    usable_h = FIXED_CANVAS_H - BOTTOM_PAD - (Y0 + HEADER_H)
 
     if row_count * target_row_h + bar_count * target_sep_h <= usable_h:
         return target_row_h, target_sep_h
@@ -468,11 +480,19 @@ def draw_row(draw, xs, y, row, idx, row_h, fonts):
         fill = lt if i == 0 else bt if i == 6 else TEXT
         value = str(c).upper() if i == 6 else c
         center_text_true(draw, (xs[i] + 2, y, xs[i + 1] - 2, y + row_h), value, font, fill, yoff=0)
+
+def content_dimensions(items, row_h, sep_h):
+    content_h = HEADER_H + sum(sep_h if item is None else row_h for item in items)
+    canvas_w = FIXED_CANVAS_W or (LEFT_PAD + TABLE_W + RIGHT_PAD)
+    canvas_h = FIXED_CANVAS_H or (TOP_PAD + content_h + BOTTOM_PAD)
+    return canvas_w, canvas_h, Y0 + content_h
+
 def render_single(items):
     row_h, sep_h = layout_for_single_image(items)
     fonts = build_fonts(row_h, sep_h)
+    canvas_w, canvas_h, content_bottom = content_dimensions(items, row_h, sep_h)
 
-    img = background()
+    img = background(canvas_w, canvas_h)
     draw = ImageDraw.Draw(img, "RGBA")
 
     xs = [X0]
@@ -493,14 +513,17 @@ def render_single(items):
             y += row_h
             row_idx += 1
 
-    draw.rectangle((X0, Y0, X0 + TABLE_W, min(y, BOTTOM_Y)), outline=GREEN, width=sc(3))
+    draw.rectangle((X0, Y0, X0 + TABLE_W, min(y, content_bottom)), outline=GREEN, width=sc(3))
 
     out = f"{OUTPUT_PREFIX}.png"
 
     # Keep high-res output. Do NOT downscale before Discord.
     img.convert("RGB").save(out, quality=98, optimize=True)
 
-    print(f"SUCCESS: Rendered ONE image: rows={row_idx}, row_h={row_h}, sep_h={sep_h}, size={CANVAS_W}x{CANVAS_H}, file={out}")
+    print(
+        f"SUCCESS: Rendered ONE image: rows={row_idx}, row_h={row_h}, sep_h={sep_h}, "
+        f"size={canvas_w}x{canvas_h}, file={out}"
+    )
     return out
 
 def create_graphics(rows):
